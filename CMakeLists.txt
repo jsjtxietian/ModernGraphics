@@ -1,0 +1,45 @@
+cmake_minimum_required(VERSION 3.12)
+
+project(OpenGLAndVulkan)
+
+set(CMAKE_SUPPRESS_REGENERATION true)
+set(CMAKE_CXX_STANDARD 20)
+
+# glad
+include_directories(3rdparty/glad/include)
+set(GLAD_SOURCES 3rdparty/glad/src/gl.c 3rdparty/glad/src/vulkan.c)
+if(WIN32)
+	set(GLAD_SOURCES ${GLAD_SOURCES} 3rdparty/glad/src/wgl.c)
+endif()
+add_library(glad ${GLAD_SOURCES})
+set_property(TARGET glad          PROPERTY FOLDER "ThirdPartyLibraries")
+
+#glfw
+set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "")
+set(GLFW_BUILD_TESTS OFF CACHE BOOL "")
+set(GLFW_BUILD_DOCS OFF CACHE BOOL "")
+set(GLFW_INSTALL OFF CACHE BOOL "")
+add_subdirectory(3rdparty/glfw)
+include_directories(3rdparty/glfw/include)
+set_property(TARGET glfw          PROPERTY FOLDER "ThirdPartyLibraries")
+
+
+
+#complier MSVC
+if(MSVC)
+    add_compile_options(-W4)
+    add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+    add_definitions(-D_CONSOLE)
+    set_property(TARGET ${PROJ_NAME} PROPERTY
+            VS_DEBUGGER_WORKING_DIRECTORY
+            "${CMAKE_SOURCE_DIR}")
+endif()
+
+
+add_executable(first src/main.cpp)
+target_link_libraries(first glad glfw)
+
+
+
+
+
