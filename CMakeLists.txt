@@ -33,6 +33,21 @@ include_directories(3rdparty/stb)
 #imgui
 include_directories(3rdparty/imgui)
 
+#easy_profiler
+option(BUILD_WITH_EASY_PROFILER "Enable EasyProfiler usage" ON)
+set(EASY_PROFILER_NO_GUI ON CACHE BOOL "")
+set(EASY_PROFILER_NO_SAMPLES ON CACHE BOOL "")
+
+add_subdirectory(3rdparty/easy_profiler)
+
+if(BUILD_WITH_EASY_PROFILER)
+	message("Enabled EasyProfiler")
+	add_definitions(-DBUILD_WITH_EASY_PROFILER=1)
+	include_directories(3rdparty/easy_profiler_release/include)
+	set_property(TARGET easy_profiler PROPERTY FOLDER "ThirdPartyLibraries")
+	set_property(TARGET profiler_converter PROPERTY FOLDER "ThirdPartyLibraries")
+endif()
+
 #complier MSVC
 if(MSVC)
     add_compile_options(-W4)
@@ -45,9 +60,9 @@ endif()
 
 
 include_directories(src)
-add_executable(first src/main.cpp src/imgui_wrapper.cpp)
+add_executable(first src/main.cpp )
 
-target_link_libraries(first glad glfw)
+target_link_libraries(first glad glfw easy_profiler)
 
 
 
