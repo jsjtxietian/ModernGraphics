@@ -27,6 +27,8 @@ set_property(TARGET glfw          PROPERTY FOLDER "ThirdPartyLibraries")
 include_directories(3rdparty/glm)
 add_subdirectory(3rdparty/glm)
 
+#stb
+include_directories(3rdparty/stb)
 
 #complier MSVC
 if(MSVC)
