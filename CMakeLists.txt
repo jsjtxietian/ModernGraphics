@@ -30,6 +30,9 @@ add_subdirectory(3rdparty/glm)
 #stb
 include_directories(3rdparty/stb)
 
+#imgui
+include_directories(3rdparty/imgui)
+
 #complier MSVC
 if(MSVC)
     add_compile_options(-W4)
@@ -41,7 +44,9 @@ if(MSVC)
 endif()
 
 
-add_executable(first src/main.cpp)
+include_directories(src)
+add_executable(first src/main.cpp src/imgui_wrapper.cpp)
+
 target_link_libraries(first glad glfw)
 
 

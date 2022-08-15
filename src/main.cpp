@@ -1,62 +1,23 @@
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
+#include <imgui.h>
 #include <glm/glm.hpp>
 #include <glm/ext.hpp>
-#include <filesystem>
 
-#define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include <stb_image_write.h>
-
-#include <stdio.h>
 #include <stdlib.h>
+#include <stdio.h>
+#include <stdint.h>
 
 using glm::mat4;
-using glm::vec3;
 
-static const char *shaderCodeVertex = R"(
-#version 460 core
-layout(std140, binding = 0) uniform PerFrameData
-{
-	uniform mat4 MVP;
-};
-layout (location=0) out vec2 uv;
-const vec2 pos[3] = vec2[3](
-	vec2(-0.6f, -0.4f),
-	vec2( 0.6f, -0.4f),
-	vec2( 0.0f,  0.6f)
-);
-const vec2 tc[3] = vec2[3](
-	vec2( 0.0, 0.0 ),
-	vec2( 1.0, 0.0 ),
-	vec2( 0.5, 1.0 )
-);
-void main()
-{
-	gl_Position = MVP * vec4(pos[gl_VertexID], 0.0, 1.0);
-	uv = tc[gl_VertexID];
-}
-)";
-
-static const char *shaderCodeFragment = R"(
-#version 460 core
-layout (location=0) in vec2 uv;
-layout (location=0) out vec4 out_FragColor;
-uniform sampler2D texture0;
-void main()
-{
-	out_FragColor = texture(texture0, uv);
-};
-)";
-
-int main(void)
+int main()
 {
 	glfwSetErrorCallback(
-		[](int error, const char *description)
+		[](int error, const char* description)
 		{
 			fprintf(stderr, "Error: %s\n", description);
-		});
+		}
+	);
 
 	if (!glfwInit())
 		exit(EXIT_FAILURE);
@@ -65,7 +26,7 @@ int main(void)
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-	GLFWwindow *window = glfwCreateWindow(1024, 768, "Simple example", nullptr, nullptr);
+	GLFWwindow* window = glfwCreateWindow(1280, 720, "Simple example", nullptr, nullptr);
 	if (!window)
 	{
 		glfwTerminate();
@@ -74,96 +35,229 @@ int main(void)
 
 	glfwSetKeyCallback(
 		window,
-		[](GLFWwindow *window, int key, int scancode, int action, int mods)
+		[](GLFWwindow* window, int key, int scancode, int action, int mods)
 		{
 			if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
 				glfwSetWindowShouldClose(window, GLFW_TRUE);
-			if (key == GLFW_KEY_F9 && action == GLFW_PRESS)
-			{
-				int width, height;
-				glfwGetFramebufferSize(window, &width, &height);
-				uint8_t *ptr = (uint8_t *)malloc(width * height * 4);
-				glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, ptr);
-				stbi_write_png("screenshot.png", width, height, 4, ptr, 0);
-				free(ptr);
-			}
-		});
+		}
+	);
+
+	glfwSetCursorPosCallback(
+		window,
+		[](auto* window, double x, double y)
+		{
+			ImGui::GetIO().MousePos = ImVec2((float)x, (float)y);
+		}
+	);
+
+	glfwSetMouseButtonCallback(
+		window,
+		[](auto* window, int button, int action, int mods)
+		{
+			auto& io = ImGui::GetIO();
+			const int idx = button == GLFW_MOUSE_BUTTON_LEFT ? 0 : button == GLFW_MOUSE_BUTTON_RIGHT ? 2 : 1;
+			io.MouseDown[idx] = action == GLFW_PRESS;
+		}
+	);
 
 	glfwMakeContextCurrent(window);
 	gladLoadGL(glfwGetProcAddress);
 	glfwSwapInterval(1);
 
-	const GLuint shaderVertex = glCreateShader(GL_VERTEX_SHADER);
-	glShaderSource(shaderVertex, 1, &shaderCodeVertex, nullptr);
-	glCompileShader(shaderVertex);
-
-	const GLuint shaderFragment = glCreateShader(GL_FRAGMENT_SHADER);
-	glShaderSource(shaderFragment, 1, &shaderCodeFragment, nullptr);
-	glCompileShader(shaderFragment);
-
-	const GLuint program = glCreateProgram();
-	glAttachShader(program, shaderVertex);
-	glAttachShader(program, shaderFragment);
-	glLinkProgram(program);
-
 	GLuint vao;
 	glCreateVertexArrays(1, &vao);
+
+	//use an upper limit of 256 kilobytes for the indices and vertices data
+	GLuint handleVBO;
+	glCreateBuffers(1, &handleVBO);
+	glNamedBufferStorage(handleVBO, 128 * 1024, nullptr, GL_DYNAMIC_STORAGE_BIT);
+
+	GLuint handleElements;
+	glCreateBuffers(1, &handleElements);
+	glNamedBufferStorage(handleElements, 256 * 1024, nullptr, GL_DYNAMIC_STORAGE_BIT);
+
+	// The geometry data consist of 2D vertex positions, texture coordinates, and RGBA colors
+	glVertexArrayElementBuffer(vao, handleElements);
+	glVertexArrayVertexBuffer(vao, 0, handleVBO, 0, sizeof(ImDrawVert));
+
+	glEnableVertexArrayAttrib(vao, 0);
+	glEnableVertexArrayAttrib(vao, 1);
+	glEnableVertexArrayAttrib(vao, 2);
+
+	// Vertex attributes corresponding to the positions, texture coordinates, and colors 
+	// are stored in an interleaved format
+	glVertexArrayAttribFormat(vao, 0, 2, GL_FLOAT, GL_FALSE, IM_OFFSETOF(ImDrawVert, pos));
+	glVertexArrayAttribFormat(vao, 1, 2, GL_FLOAT, GL_FALSE, IM_OFFSETOF(ImDrawVert, uv));
+	glVertexArrayAttribFormat(vao, 2, 4, GL_UNSIGNED_BYTE, GL_TRUE, IM_OFFSETOF(ImDrawVert, col));
+
+	// tell OpenGL that every vertex stream should be
+	// read from the same buffer bound to the binding point with an index of 0
+	glVertexArrayAttribBinding(vao, 0, 0);
+	glVertexArrayAttribBinding(vao, 1, 0);
+	glVertexArrayAttribBinding(vao, 2, 0);
+
 	glBindVertexArray(vao);
 
-	const GLsizeiptr kBufferSize = sizeof(mat4);
+	const GLchar* shaderCodeVertex = R"(
+		#version 460 core
+		layout (location = 0) in vec2 Position;
+		layout (location = 1) in vec2 UV;
+		layout (location = 2) in vec4 Color;
+		layout(std140, binding = 0) uniform PerFrameData
+		{
+			uniform mat4 MVP;
+		};
+		out vec2 Frag_UV;
+		out vec4 Frag_Color;
+		void main()
+		{
+			Frag_UV = UV;
+			Frag_Color = Color;
+			gl_Position = MVP * vec4(Position.xy,0,1);
+		}
+	)";
+
+	const GLchar* shaderCodeFragment = R"(
+		#version 460 core
+		in vec2 Frag_UV;
+		in vec4 Frag_Color;
+		layout (binding = 0) uniform sampler2D Texture;
+		layout (location = 0) out vec4 Out_Color;
+		void main()
+		{
+			Out_Color = Frag_Color * texture(Texture, Frag_UV.st);
+		}
+	)";
+
+	const GLuint handleVertex = glCreateShader(GL_VERTEX_SHADER);
+	glShaderSource(handleVertex, 1, &shaderCodeVertex, nullptr);
+	glCompileShader(handleVertex);
+
+	const GLuint handleFragment = glCreateShader(GL_FRAGMENT_SHADER);
+	glShaderSource(handleFragment, 1, &shaderCodeFragment, nullptr);
+	glCompileShader(handleFragment);
+
+	const GLuint program = glCreateProgram();
+	glAttachShader(program, handleVertex);
+	glAttachShader(program, handleFragment);
+	glLinkProgram(program);
+	glUseProgram(program);
 
 	GLuint perFrameDataBuffer;
 	glCreateBuffers(1, &perFrameDataBuffer);
-	glNamedBufferStorage(perFrameDataBuffer, kBufferSize, nullptr, GL_DYNAMIC_STORAGE_BIT);
-	glBindBufferRange(GL_UNIFORM_BUFFER, 0, perFrameDataBuffer, 0, kBufferSize);
+	glNamedBufferStorage(perFrameDataBuffer, sizeof(mat4), nullptr, GL_DYNAMIC_STORAGE_BIT);
+	glBindBufferBase(GL_UNIFORM_BUFFER, 0, perFrameDataBuffer);
 
-	glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+	ImGui::CreateContext();
 
-	int w, h, comp;
-	const uint8_t *img = stbi_load("data/stb_sample.jpg", &w, &h, &comp, 3);
+	ImGuiIO& io = ImGui::GetIO();
+	// tell ImGui to output meshes with more than 65535 vertices that can be indexed with 16-bit indices
+	io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
+
+	// Build texture atlas
+	ImFontConfig cfg = ImFontConfig();
+	cfg.FontDataOwnedByAtlas = false; // manage the memory ourselves
+	cfg.RasterizerMultiply = 1.5f; // Brighten up the font a little bit 
+	// Align every glyph to the pixel boundary and rasterize them at a higher quality for sub-pixel positioning. 
+	cfg.SizePixels = 768.0f / 32.0f; 
+	cfg.PixelSnapH = true;
+	cfg.OversampleH = 4;
+	cfg.OversampleV = 4;
+	ImFont* Font = io.Fonts->AddFontFromFileTTF("data/OpenSans-Light.ttf", cfg.SizePixels, &cfg);
+
+	// take the font atlas bitmap data from ImGui in 32-bit RGBA format and upload it to OpenGL
+	unsigned char* pixels = nullptr;
+	int width, height;
+	io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
 
 	GLuint texture;
 	glCreateTextures(GL_TEXTURE_2D, 1, &texture);
 	glTextureParameteri(texture, GL_TEXTURE_MAX_LEVEL, 0);
 	glTextureParameteri(texture, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTextureParameteri(texture, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTextureStorage2D(texture, 1, GL_RGB8, w, h);
+	glTextureStorage2D(texture, 1, GL_RGBA8, width, height);
+	// Scanlines in the ImGui bitmap are not padded. Disable the pixel unpack alignment
+	// in OpenGL by setting its value to 1 byte
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-	glTextureSubImage2D(texture, 0, 0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE, img);
+	glTextureSubImage2D(texture, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 	glBindTextures(0, 1, &texture);
 
-	stbi_image_free((void *)img);
+	// pass the texture handle to ImGui so that we can use it in subsequent
+	// draw calls when required
+	io.Fonts->TexID = (ImTextureID)(intptr_t)texture;
+	io.FontDefault = Font;
+	io.DisplayFramebufferScale = ImVec2(1, 1);
+
+	// rendered with blending and the scissor test turned on and the depth
+	// test and backface culling disabled.
+	glEnable(GL_BLEND);
+	glBlendEquation(GL_FUNC_ADD);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glDisable(GL_CULL_FACE);
+	glDisable(GL_DEPTH_TEST);
+	glEnable(GL_SCISSOR_TEST);
+	glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
 
 	while (!glfwWindowShouldClose(window))
 	{
 		int width, height;
 		glfwGetFramebufferSize(window, &width, &height);
-		const float ratio = width / (float)height;
 
 		glViewport(0, 0, width, height);
 		glClear(GL_COLOR_BUFFER_BIT);
 
-		const mat4 m = glm::rotate(mat4(1.0f), (float)glfwGetTime(), vec3(0.0f, 0.0f, 1.0f));
-		const mat4 p = glm::ortho(-ratio, ratio, -1.f, 1.f, 1.f, -1.f);
-		const mat4 mvp = p * m;
+		ImGuiIO& io = ImGui::GetIO();
+		io.DisplaySize = ImVec2((float)width, (float)height);
+		ImGui::NewFrame();
+		ImGui::ShowDemoWindow();
+		// The geometry data is generated in the ImGui::Render() function and can be
+		// retrieved via ImGui::GetDrawData()
+		ImGui::Render();
 
-		glUseProgram(program);
-		glNamedBufferSubData(perFrameDataBuffer, 0, kBufferSize, glm::value_ptr(mvp));
-		glDrawArrays(GL_TRIANGLES, 0, 3);
+		const ImDrawData* draw_data = ImGui::GetDrawData();
+
+		// construct a proper orthographic projection matrix based on the left, right, top,
+		// and bottom clipping planes provided by ImGui
+		const float L = draw_data->DisplayPos.x;
+		const float R = draw_data->DisplayPos.x + draw_data->DisplaySize.x;
+		const float T = draw_data->DisplayPos.y;
+		const float B = draw_data->DisplayPos.y + draw_data->DisplaySize.y;
+		const mat4 orthoProjection = glm::ortho(L, R, B, T);
+
+		glNamedBufferSubData(perFrameDataBuffer, 0, sizeof(mat4), glm::value_ptr(orthoProjection));
+
+		// go through all of the ImGui command lists, update the content of
+		// the index and vertex buffers, and invoke the rendering commands
+		for (int n = 0; n < draw_data->CmdListsCount; n++)
+		{
+			const ImDrawList* cmd_list = draw_data->CmdLists[n];
+			// Each ImGui command list has vertex and index data associated with it
+			glNamedBufferSubData(handleVBO, 0, (GLsizeiptr)cmd_list->VtxBuffer.Size * sizeof(ImDrawVert), cmd_list->VtxBuffer.Data);
+			glNamedBufferSubData(handleElements, 0, (GLsizeiptr)cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx), cmd_list->IdxBuffer.Data);
+
+			// Iterate over them and render the actual geometry
+			for (int cmd_i = 0; cmd_i < cmd_list->CmdBuffer.Size; cmd_i++)
+			{
+				const ImDrawCmd* pcmd = &cmd_list->CmdBuffer[cmd_i];
+				const ImVec4 cr = pcmd->ClipRect;
+				glScissor((int)cr.x, (int)(height - cr.w), (int)(cr.z - cr.x), (int)(cr.w - cr.y));
+				glBindTextureUnit(0, (GLuint)(intptr_t)pcmd->TextureId);
+				glDrawElementsBaseVertex(GL_TRIANGLES, (GLsizei)pcmd->ElemCount, GL_UNSIGNED_SHORT,
+					(void*)(intptr_t)(pcmd->IdxOffset * sizeof(ImDrawIdx)), (GLint)pcmd->VtxOffset);
+			}
+		}
+
+		// reset the scissor rectangle
+		glScissor(0, 0, width, height);
 
 		glfwSwapBuffers(window);
 		glfwPollEvents();
 	}
 
-	glDeleteTextures(1, &texture);
-	glDeleteBuffers(1, &perFrameDataBuffer);
-	glDeleteProgram(program);
-	glDeleteShader(shaderFragment);
-	glDeleteShader(shaderVertex);
-	glDeleteVertexArrays(1, &vao);
+	ImGui::DestroyContext();
 
 	glfwDestroyWindow(window);
-	glfwTerminate();
 
-	return 0;
+	glfwTerminate();
+	exit(EXIT_SUCCESS);
 }
