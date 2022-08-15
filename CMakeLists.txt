@@ -48,6 +48,16 @@ if(BUILD_WITH_EASY_PROFILER)
 	set_property(TARGET profiler_converter PROPERTY FOLDER "ThirdPartyLibraries")
 endif()
 
+#optick
+option(BUILD_WITH_OPTICK "Enable Optick usage" OFF)
+if(BUILD_WITH_OPTICK)
+    message("Enabled Optick")
+    include_directories(3rdparty/optick/src)
+	add_definitions(-DBUILD_WITH_OPTICK=1)
+    add_subdirectory(3rdparty/optick)
+	set_property(TARGET OptickCore PROPERTY FOLDER "ThirdPartyLibraries")
+endif()
+
 #complier MSVC
 if(MSVC)
     add_compile_options(-W4)
@@ -62,7 +72,7 @@ endif()
 include_directories(src)
 add_executable(first src/main.cpp )
 
-target_link_libraries(first glad glfw easy_profiler)
+target_link_libraries(first glad glfw OptickCore)
 
 
 

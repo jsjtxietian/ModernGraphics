@@ -2,7 +2,7 @@
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/ext.hpp>
-#include <easy/profiler.h>
+#include <optick.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -82,8 +82,8 @@ struct PerFrameData
 
 int main(void)
 {
-	EASY_MAIN_THREAD;
-	EASY_PROFILER_ENABLE;
+	OPTICK_THREAD("MainThread");
+	OPTICK_START_CAPTURE();
 
 	glfwSetErrorCallback(
 		[](int error, const char *description)
@@ -117,7 +117,7 @@ int main(void)
 	gladLoadGL(glfwGetProcAddress);
 	glfwSwapInterval(1);
 
-	EASY_BLOCK("Create resources");
+	OPTICK_PUSH("Create resources");
 
 	const GLuint shaderVertex = glCreateShader(GL_VERTEX_SHADER);
 	glShaderSource(shaderVertex, 1, &shaderCodeVertex, nullptr);
@@ -143,19 +143,20 @@ int main(void)
 	glNamedBufferStorage(perFrameDataBuffer, kBufferSize, nullptr, GL_DYNAMIC_STORAGE_BIT);
 	glBindBufferRange(GL_UNIFORM_BUFFER, 0, perFrameDataBuffer, 0, kBufferSize);
 
-	EASY_END_BLOCK;
+	OPTICK_POP();
 
 	{
-		EASY_BLOCK("Set state");
+		OPTICK_PUSH("Set state");
 		glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
 		glEnable(GL_DEPTH_TEST);
 		glEnable(GL_POLYGON_OFFSET_LINE);
 		glPolygonOffset(-1.0f, -1.0f);
+		OPTICK_POP();
 	}
 
 	while (!glfwWindowShouldClose(window))
 	{
-		EASY_BLOCK("MainLoop");
+		OPTICK_FRAME("MainLoop")
 
 		int width, height;
 		glfwGetFramebufferSize(window, &width, &height);
@@ -172,33 +173,36 @@ int main(void)
 		glUseProgram(program);
 
 		{
-			EASY_BLOCK("Pass1");
+			OPTICK_PUSH("Pass1");
 			std::this_thread::sleep_for(std::chrono::milliseconds(2));
 			glNamedBufferSubData(perFrameDataBuffer, 0, kBufferSize, &perFrameData);
 
 			glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 			glDrawArrays(GL_TRIANGLES, 0, 36);
+			OPTICK_POP();
 		}
 
 		{
-			EASY_BLOCK("Pass2");
+			OPTICK_PUSH("Pass2");
 			std::this_thread::sleep_for(std::chrono::milliseconds(2));
-
 			perFrameData.isWireframe = true;
 			glNamedBufferSubData(perFrameDataBuffer, 0, kBufferSize, &perFrameData);
 
 			glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 			glDrawArrays(GL_TRIANGLES, 0, 36);
+			OPTICK_POP();
 		}
 
 		{
-			EASY_BLOCK("glfwSwapBuffers()");
+			OPTICK_PUSH("glfwSwapBuffers()");
 			glfwSwapBuffers(window);
+			OPTICK_POP();
 		}
 		{
-			EASY_BLOCK("glfwPollEvents()");
+			OPTICK_PUSH("glfwPollEvents()");
 			std::this_thread::sleep_for(std::chrono::milliseconds(2));
 			glfwPollEvents();
+			OPTICK_POP();
 		}
 	}
 
@@ -211,7 +215,8 @@ int main(void)
 	glfwDestroyWindow(window);
 	glfwTerminate();
 
-	profiler::dumpBlocksToFile("profiler_dump.prof");
+	OPTICK_STOP_CAPTURE();
+	OPTICK_SAVE_CAPTURE("profiler_dump");
 
 	return 0;
 }
