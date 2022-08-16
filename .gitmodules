@@ -22,3 +22,6 @@
 [submodule "3rdparty/etc2comp"]
 	path = 3rdparty/etc2comp
 	url = https://github.com/google/etc2comp
+[submodule "3rdparty/taskflow"]
+	path = 3rdparty/taskflow
+	url = https://github.com/taskflow/taskflow.git

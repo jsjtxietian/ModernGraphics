@@ -78,14 +78,17 @@ set_property(TARGET assimp        PROPERTY FOLDER "ThirdPartyLibraries")
 set_property(TARGET UpdateAssimpLibsDebugSymbolsAndDLLs PROPERTY FOLDER "ThirdPartyLibraries")
 
 #etc2comp
-add_subdirectory(3rdparty/etc2comp)
-include_directories(3rdparty/etc2comp/EtcLib/Etc)
-include_directories(3rdparty/etc2comp/EtcLib/EtcCodec)
-include_directories(3rdparty/etc2comp/EtcTool)
-set_property(TARGET EtcLib        PROPERTY FOLDER "ThirdPartyLibraries")
-set_property(TARGET EtcTool       PROPERTY FOLDER "ThirdPartyLibraries")
-target_sources(first PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/../3rdparty/etc2comp/EtcTool/EtcFile.cpp)
-target_sources(first PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/../3rdparty/etc2comp/EtcTool/EtcFileHeader.cpp)
+# add_subdirectory(3rdparty/etc2comp)
+# include_directories(3rdparty/etc2comp/EtcLib/Etc)
+# include_directories(3rdparty/etc2comp/EtcLib/EtcCodec)
+# include_directories(3rdparty/etc2comp/EtcTool)
+# set_property(TARGET EtcLib        PROPERTY FOLDER "ThirdPartyLibraries")
+# set_property(TARGET EtcTool       PROPERTY FOLDER "ThirdPartyLibraries")
+# target_sources(first PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/../3rdparty/etc2comp/EtcTool/EtcFile.cpp)
+# target_sources(first PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/../3rdparty/etc2comp/EtcTool/EtcFileHeader.cpp)
+
+#taskflow
+include_directories(3rdparty/taskflow)
 
 #complier MSVC
 if(MSVC)
@@ -99,7 +102,7 @@ endif()
 
 
 
-target_link_libraries(first glad glfw EtcLib)
+target_link_libraries(first glad glfw )
 
 
 
