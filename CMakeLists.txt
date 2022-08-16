@@ -6,8 +6,10 @@ set(CMAKE_SUPPRESS_REGENERATION true)
 set(CMAKE_CXX_STANDARD 20)
 
 # main
+file(GLOB_RECURSE SRC_FILES LIST_DIRECTORIES false RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} src/*.c??)
+file(GLOB_RECURSE HEADER_FILES LIST_DIRECTORIES false RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} src/*.h)
 include_directories(src)
-add_executable(first src/main.cpp )
+add_executable(SampleTest ${SRC_FILES} ${HEADER_FILES})
 
 # glad
 include_directories(3rdparty/glad/include)
@@ -97,6 +99,12 @@ set(MESHOPT_BUILD_SHARED_LIBS OFF CACHE BOOL "")
 add_subdirectory(3rdparty/meshoptimizer)
 set_property(TARGET meshoptimizer PROPERTY FOLDER "ThirdPartyLibraries")
 
+# other included 
+set_property(TARGET IrrXML        PROPERTY FOLDER "ThirdPartyLibraries")
+set_property(TARGET zlibstatic    PROPERTY FOLDER "ThirdPartyLibraries")
+set_property(TARGET zlib          PROPERTY FOLDER "ThirdPartyLibraries")
+set_property(TARGET uninstall     PROPERTY FOLDER "ThirdPartyLibraries")
+
 #complier MSVC
 if(MSVC)
     add_compile_options(-W4)
@@ -109,7 +117,7 @@ endif()
 
 
 
-target_link_libraries(first glad glfw assimp meshoptimizer)
+target_link_libraries(SampleTest glad glfw assimp meshoptimizer)
 
 
 
