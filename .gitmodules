@@ -19,3 +19,6 @@
 [submodule "3rdparty/assimp"]
 	path = 3rdparty/assimp
 	url = https://github.com/assimp/assimp.git
+[submodule "3rdparty/etc2comp"]
+	path = 3rdparty/etc2comp
+	url = https://github.com/google/etc2comp

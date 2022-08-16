@@ -5,6 +5,10 @@ project(OpenGLAndVulkan)
 set(CMAKE_SUPPRESS_REGENERATION true)
 set(CMAKE_CXX_STANDARD 20)
 
+# main
+include_directories(src)
+add_executable(first src/main.cpp )
+
 # glad
 include_directories(3rdparty/glad/include)
 set(GLAD_SOURCES 3rdparty/glad/src/gl.c 3rdparty/glad/src/vulkan.c)
@@ -73,6 +77,16 @@ include_directories(3rdparty/assimp/include)
 set_property(TARGET assimp        PROPERTY FOLDER "ThirdPartyLibraries")
 set_property(TARGET UpdateAssimpLibsDebugSymbolsAndDLLs PROPERTY FOLDER "ThirdPartyLibraries")
 
+#etc2comp
+add_subdirectory(3rdparty/etc2comp)
+include_directories(3rdparty/etc2comp/EtcLib/Etc)
+include_directories(3rdparty/etc2comp/EtcLib/EtcCodec)
+include_directories(3rdparty/etc2comp/EtcTool)
+set_property(TARGET EtcLib        PROPERTY FOLDER "ThirdPartyLibraries")
+set_property(TARGET EtcTool       PROPERTY FOLDER "ThirdPartyLibraries")
+target_sources(first PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/../3rdparty/etc2comp/EtcTool/EtcFile.cpp)
+target_sources(first PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/../3rdparty/etc2comp/EtcTool/EtcFileHeader.cpp)
+
 #complier MSVC
 if(MSVC)
     add_compile_options(-W4)
@@ -84,10 +98,8 @@ if(MSVC)
 endif()
 
 
-include_directories(src)
-add_executable(first src/main.cpp )
 
-target_link_libraries(first glad glfw assimp)
+target_link_libraries(first glad glfw EtcLib)
 
 
 

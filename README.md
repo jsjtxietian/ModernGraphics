@@ -8,3 +8,4 @@
 * easy_profiler v2.1.0
 * optick 1.3.1.0
 * assimp a9f82dbe0b8a658003f93c7b5108ee4521458a18
+* etc2comp 9cd0f9cae0f32338943699bb418107db61bb66f2
