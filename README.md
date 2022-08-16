@@ -11,3 +11,4 @@
 * etc2comp 9cd0f9cae0f32338943699bb418107db61bb66f2
     * Consider add https://github.com/BinomialLLC/basis_universal 
 * task flow v3.1.0
+* mesh optimizer v0.16

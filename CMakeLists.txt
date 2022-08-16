@@ -90,6 +90,13 @@ set_property(TARGET UpdateAssimpLibsDebugSymbolsAndDLLs PROPERTY FOLDER "ThirdPa
 #taskflow
 include_directories(3rdparty/taskflow)
 
+#mesh optimizer
+set(MESHOPT_BUILD_DEMO OFF CACHE BOOL "")
+set(MESHOPT_BUILD_TOOLS OFF CACHE BOOL "")
+set(MESHOPT_BUILD_SHARED_LIBS OFF CACHE BOOL "")
+add_subdirectory(3rdparty/meshoptimizer)
+set_property(TARGET meshoptimizer PROPERTY FOLDER "ThirdPartyLibraries")
+
 #complier MSVC
 if(MSVC)
     add_compile_options(-W4)
@@ -102,7 +109,7 @@ endif()
 
 
 
-target_link_libraries(first glad glfw )
+target_link_libraries(first glad glfw assimp meshoptimizer)
 
 
 

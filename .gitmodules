@@ -25,3 +25,6 @@
 [submodule "3rdparty/taskflow"]
 	path = 3rdparty/taskflow
 	url = https://github.com/taskflow/taskflow.git
+[submodule "3rdparty/meshoptimizer"]
+	path = 3rdparty/meshoptimizer
+	url = https://github.com/zeux/meshoptimizer
