@@ -16,3 +16,6 @@
 [submodule "3rdparty/optick"]
 	path = 3rdparty/optick
 	url = https://github.com/bombomby/optick.git
+[submodule "3rdparty/assimp"]
+	path = 3rdparty/assimp
+	url = https://github.com/assimp/assimp.git

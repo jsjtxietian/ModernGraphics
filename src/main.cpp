@@ -2,12 +2,15 @@
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/ext.hpp>
-#include <optick.h>
+#include <assimp/scene.h>
+#include <assimp/postprocess.h>
+#include <assimp/cimport.h>
+#include <assimp/version.h>
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <chrono>
-#include <thread>
+
+#include <vector>
 
 using glm::mat4;
 using glm::vec3;
@@ -19,48 +22,12 @@ layout(std140, binding = 0) uniform PerFrameData
 	uniform mat4 MVP;
 	uniform int isWireframe;
 };
+layout (location=0) in vec3 pos;
 layout (location=0) out vec3 color;
-const vec3 pos[8] = vec3[8](
-	vec3(-1.0f,-1.0f, 1.0f),
-	vec3( 1.0f,-1.0f, 1.0f),
-	vec3( 1.0f, 1.0f, 1.0f),
-	vec3(-1.0f, 1.0f, 1.0f),
-
-	vec3(-1.0f,-1.0f,-1.0f),
-	vec3( 1.0f,-1.0f,-1.0f),
-	vec3( 1.0f, 1.0f,-1.0f),
-	vec3(-1.0f, 1.0f,-1.0f)
-);
-const vec3 col[8] = vec3[8](
-	vec3( 1.0f, 0.0f, 0.0f),
-	vec3( 0.0f, 1.0f, 0.0f),
-	vec3( 0.0f, 0.0f, 1.0f),
-	vec3( 1.0f, 1.0f, 0.0f),
-
-	vec3( 1.0f, 1.0f, 0.0f),
-	vec3( 0.0f, 0.0f, 1.0f),
-	vec3( 0.0f, 1.0f, 0.0f),
-	vec3( 1.0f, 0.0f, 0.0f)
-);
-const int indices[36] = int[36](
-	// front
-	0, 1, 2, 2, 3, 0,
-	// right
-	1, 5, 6, 6, 2, 1,
-	// back
-	7, 6, 5, 5, 4, 7,
-	// left
-	4, 0, 3, 3, 7, 4,
-	// bottom
-	4, 5, 1, 1, 0, 4,
-	// top
-	3, 2, 6, 6, 7, 3
-);
 void main()
 {
-	int idx = indices[gl_VertexID];
-	gl_Position = MVP * vec4(pos[idx], 1.0);
-	color = isWireframe > 0 ? vec3( 0.0f ) : col[idx];
+	gl_Position = MVP * vec4(pos, 1.0);
+	color = isWireframe > 0 ? vec3(0.0f) : pos.xyz;
 }
 )";
 
@@ -82,9 +49,6 @@ struct PerFrameData
 
 int main(void)
 {
-	OPTICK_THREAD("MainThread");
-	OPTICK_START_CAPTURE();
-
 	glfwSetErrorCallback(
 		[](int error, const char *description)
 		{
@@ -117,8 +81,6 @@ int main(void)
 	gladLoadGL(glfwGetProcAddress);
 	glfwSwapInterval(1);
 
-	OPTICK_PUSH("Create resources");
-
 	const GLuint shaderVertex = glCreateShader(GL_VERTEX_SHADER);
 	glShaderSource(shaderVertex, 1, &shaderCodeVertex, nullptr);
 	glCompileShader(shaderVertex);
@@ -143,21 +105,53 @@ int main(void)
 	glNamedBufferStorage(perFrameDataBuffer, kBufferSize, nullptr, GL_DYNAMIC_STORAGE_BIT);
 	glBindBufferRange(GL_UNIFORM_BUFFER, 0, perFrameDataBuffer, 0, kBufferSize);
 
-	OPTICK_POP();
+	glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+	glEnable(GL_DEPTH_TEST);
+	glEnable(GL_POLYGON_OFFSET_LINE);
+	glPolygonOffset(-1.0f, -1.0f);
 
+	GLuint meshData;
+	glCreateBuffers(1, &meshData);
+
+	const aiScene *scene = aiImportFile("data/rubber_duck/scene.gltf", aiProcess_Triangulate);
+
+	if (!scene || !scene->HasMeshes())
 	{
-		OPTICK_PUSH("Set state");
-		glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
-		glEnable(GL_DEPTH_TEST);
-		glEnable(GL_POLYGON_OFFSET_LINE);
-		glPolygonOffset(-1.0f, -1.0f);
-		OPTICK_POP();
+		printf("Unable to load data/rubber_duck/scene.gltf\n");
+		exit(255);
 	}
+
+	const aiMesh *mesh = scene->mMeshes[0];
+
+	//only use vertex positions in vec3 format without indices
+	std::vector<vec3> positions;
+	for (unsigned int i = 0; i != mesh->mNumFaces; i++)
+	{
+		const aiFace &face = mesh->mFaces[i];
+		const unsigned int idx[3] = {face.mIndices[0], face.mIndices[1], face.mIndices[2]};
+		//we can flatten all of the indices and store only the vertex positions
+		for (int j = 0; j != 3; j++)
+		{
+			const aiVector3D v = mesh->mVertices[idx[j]];
+			//Swap the y and z coordinates to orient the model
+			positions.push_back(vec3(v.x, v.z, v.y));
+		}
+	}
+
+	aiReleaseImport(scene);
+
+	//pload the content of positions[] into an OpenGL buffer
+	glNamedBufferStorage(meshData, sizeof(vec3) * positions.size(), positions.data(), 0);
+
+	glVertexArrayVertexBuffer(vao, 0, meshData, 0, sizeof(vec3));
+	glEnableVertexArrayAttrib(vao, 0);
+	glVertexArrayAttribFormat(vao, 0, 3, GL_FLOAT, GL_FALSE, 0);
+	glVertexArrayAttribBinding(vao, 0, 0);
+
+	const int numVertices = static_cast<int>(positions.size());
 
 	while (!glfwWindowShouldClose(window))
 	{
-		OPTICK_FRAME("MainLoop")
-
 		int width, height;
 		glfwGetFramebufferSize(window, &width, &height);
 		const float ratio = width / (float)height;
@@ -165,47 +159,28 @@ int main(void)
 		glViewport(0, 0, width, height);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		const mat4 m = glm::rotate(glm::translate(mat4(1.0f), vec3(0.0f, 0.0f, -3.5f)), (float)glfwGetTime(), vec3(1.0f, 1.0f, 1.0f));
+		const mat4 m = glm::rotate(glm::translate(mat4(1.0f), vec3(0.0f, -0.5f, -1.5f)), (float)glfwGetTime(), vec3(0.0f, 1.0f, 0.0f));
 		const mat4 p = glm::perspective(45.0f, ratio, 0.1f, 1000.0f);
 
 		PerFrameData perFrameData = {.mvp = p * m, .isWireframe = false};
 
 		glUseProgram(program);
+		glNamedBufferSubData(perFrameDataBuffer, 0, kBufferSize, &perFrameData);
 
-		{
-			OPTICK_PUSH("Pass1");
-			std::this_thread::sleep_for(std::chrono::milliseconds(2));
-			glNamedBufferSubData(perFrameDataBuffer, 0, kBufferSize, &perFrameData);
+		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+		glDrawArrays(GL_TRIANGLES, 0, numVertices);
 
-			glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-			glDrawArrays(GL_TRIANGLES, 0, 36);
-			OPTICK_POP();
-		}
+		perFrameData.isWireframe = true;
+		glNamedBufferSubData(perFrameDataBuffer, 0, kBufferSize, &perFrameData);
 
-		{
-			OPTICK_PUSH("Pass2");
-			std::this_thread::sleep_for(std::chrono::milliseconds(2));
-			perFrameData.isWireframe = true;
-			glNamedBufferSubData(perFrameDataBuffer, 0, kBufferSize, &perFrameData);
+		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+		glDrawArrays(GL_TRIANGLES, 0, numVertices);
 
-			glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-			glDrawArrays(GL_TRIANGLES, 0, 36);
-			OPTICK_POP();
-		}
-
-		{
-			OPTICK_PUSH("glfwSwapBuffers()");
-			glfwSwapBuffers(window);
-			OPTICK_POP();
-		}
-		{
-			OPTICK_PUSH("glfwPollEvents()");
-			std::this_thread::sleep_for(std::chrono::milliseconds(2));
-			glfwPollEvents();
-			OPTICK_POP();
-		}
+		glfwSwapBuffers(window);
+		glfwPollEvents();
 	}
 
+	glDeleteBuffers(1, &meshData);
 	glDeleteBuffers(1, &perFrameDataBuffer);
 	glDeleteProgram(program);
 	glDeleteShader(shaderFragment);
@@ -214,9 +189,6 @@ int main(void)
 
 	glfwDestroyWindow(window);
 	glfwTerminate();
-
-	OPTICK_STOP_CAPTURE();
-	OPTICK_SAVE_CAPTURE("profiler_dump");
 
 	return 0;
 }
