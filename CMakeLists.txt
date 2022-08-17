@@ -5,9 +5,23 @@ project(OpenGLAndVulkan)
 set(CMAKE_SUPPRESS_REGENERATION true)
 set(CMAKE_CXX_STANDARD 20)
 
+macro(SETUP_GROUPS src_files)
+	foreach(FILE ${src_files})
+		get_filename_component(PARENT_DIR "${FILE}" PATH)
+
+		# skip src or include and changes /'s to \\'s
+		set(GROUP "${PARENT_DIR}")
+		string(REPLACE "/" "\\" GROUP "${GROUP}")
+
+		source_group("${GROUP}" FILES "${FILE}")
+	endforeach()
+endmacro()
+
 # main
 file(GLOB_RECURSE SRC_FILES LIST_DIRECTORIES false RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} src/*.c??)
 file(GLOB_RECURSE HEADER_FILES LIST_DIRECTORIES false RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} src/*.h)
+SETUP_GROUPS("${SRC_FILES}")
+SETUP_GROUPS("${HEADER_FILES}")
 include_directories(src)
 include_directories(3rdparty)
 add_executable(SampleTest ${SRC_FILES} ${HEADER_FILES})
@@ -111,9 +125,7 @@ if(MSVC)
     add_compile_options(-W4)
     add_definitions(-D_CRT_SECURE_NO_WARNINGS)
     add_definitions(-D_CONSOLE)
-    set_property(TARGET ${PROJ_NAME} PROPERTY
-            VS_DEBUGGER_WORKING_DIRECTORY
-            "${CMAKE_SOURCE_DIR}")
+    set_property(TARGET SampleTest PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 endif()
 
 
