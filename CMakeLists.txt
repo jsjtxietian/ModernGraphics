@@ -9,6 +9,7 @@ set(CMAKE_CXX_STANDARD 20)
 file(GLOB_RECURSE SRC_FILES LIST_DIRECTORIES false RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} src/*.c??)
 file(GLOB_RECURSE HEADER_FILES LIST_DIRECTORIES false RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} src/*.h)
 include_directories(src)
+include_directories(3rdparty)
 add_executable(SampleTest ${SRC_FILES} ${HEADER_FILES})
 
 # glad

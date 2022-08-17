@@ -1,17 +1,16 @@
-#include <glad/gl.h>
+#include <assert.h>
+#include <stdio.h>
+
+#include "GL.h"
+
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/ext.hpp>
-#include <assimp/scene.h>
-#include <assimp/postprocess.h>
-#include <assimp/cimport.h>
-#include <assimp/version.h>
-#include <meshoptimizer.h>
 
-#include <stdio.h>
-#include <stdlib.h>
-
-#include <vector>
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb/stb_image.h>
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include <stb/stb_image_write.h>
 
 using glm::mat4;
 using glm::vec3;
@@ -22,72 +21,36 @@ layout(std140, binding = 0) uniform PerFrameData
 {
 	uniform mat4 MVP;
 };
-layout (location=0) in vec3 pos;
-layout (location=0) out vec3 color;
+layout (location=0) out vec2 uv;
+const vec2 pos[3] = vec2[3](
+	vec2(-0.6f, -0.4f),
+	vec2( 0.6f, -0.4f),
+	vec2( 0.0f,  0.6f)
+);
+const vec2 tc[3] = vec2[3](
+	vec2( 0.0, 0.0 ),
+	vec2( 1.0, 0.0 ),
+	vec2( 0.5, 1.0 )
+);
 void main()
 {
-	gl_Position = MVP * vec4(pos, 1.0);
-	color = pos.xyz;
+	gl_Position = MVP * vec4(pos[gl_VertexID], 0.0, 1.0);
+	uv = tc[gl_VertexID];
 }
 )";
 
-// use barycentric coordinates to identify the proximity of the
-// triangle edge inside each triangle and change the color accordingly
-
-static const char *shaderCodeGeometry = R"(
-#version 460 core
-
-layout( triangles ) in;
-layout( triangle_strip, max_vertices = 3 ) out;
-
-layout (location=0) in vec3 color[];
-layout (location=0) out vec3 colors;
-layout (location=1) out vec3 barycoords;
-
-void main()
-{
-	const vec3 bc[3] = vec3[]
-	(
-		vec3(1.0, 0.0, 0.0),
-		vec3(0.0, 1.0, 0.0),
-		vec3(0.0, 0.0, 1.0)
-	);
-	for ( int i = 0; i < 3; i++ )
-	{
-		gl_Position = gl_in[i].gl_Position;
-		colors = color[i];
-		barycoords = bc[i];
-		EmitVertex();
-	}
-	EndPrimitive();
-}
-)";
-
-// fwidth() function calculates the sum of the absolute values of the derivatives in
-// the x and y screen coordinates and is used to determine the thickness of the lines
-// smoothstep() function is used for antialiasing
 static const char *shaderCodeFragment = R"(
 #version 460 core
-layout (location=0) in vec3 colors;
-layout (location=1) in vec3 barycoords;
+layout (location=0) in vec2 uv;
 layout (location=0) out vec4 out_FragColor;
-float edgeFactor(float thickness)
-{
-	vec3 a3 = smoothstep( vec3( 0.0 ), fwidth(barycoords) * thickness, barycoords);
-	return min( min( a3.x, a3.y ), a3.z );
-}
+uniform sampler2D texture0;
 void main()
 {
-	out_FragColor = vec4( mix( vec3(0.0), colors, edgeFactor(1.0) ), 1.0 );
+	out_FragColor = texture(texture0, uv);
 };
 )";
 
-struct PerFrameData
-{
-	mat4 mvp;
-};
-
-int main(void)
+int main()
 {
 	glfwSetErrorCallback(
 		[](int error, const char *description)
@@ -118,125 +81,52 @@ int main(void)
 		});
 
 	glfwMakeContextCurrent(window);
-	gladLoadGL(glfwGetProcAddress);
-	glfwSwapInterval(1);
 
-	const GLuint shaderVertex = glCreateShader(GL_VERTEX_SHADER);
-	glShaderSource(shaderVertex, 1, &shaderCodeVertex, nullptr);
-	glCompileShader(shaderVertex);
+	GL4API api;
 
-	const GLuint shaderGeometry = glCreateShader(GL_GEOMETRY_SHADER);
-	glShaderSource(shaderGeometry, 1, &shaderCodeGeometry, nullptr);
-	glCompileShader(shaderGeometry);
+	GetAPI4(&api, [](const char *func) -> void *
+			{ return (void *)glfwGetProcAddress(func); });
+	InjectAPITracer4(&api);
 
-	const GLuint shaderFragment = glCreateShader(GL_FRAGMENT_SHADER);
-	glShaderSource(shaderFragment, 1, &shaderCodeFragment, nullptr);
-	glCompileShader(shaderFragment);
+	const GLuint shaderVertex = api.glCreateShader(GL_VERTEX_SHADER);
+	api.glShaderSource(shaderVertex, 1, &shaderCodeVertex, nullptr);
+	api.glCompileShader(shaderVertex);
 
-	const GLuint program = glCreateProgram();
-	glAttachShader(program, shaderVertex);
-	glAttachShader(program, shaderGeometry);
-	glAttachShader(program, shaderFragment);
-	glLinkProgram(program);
-	glUseProgram(program);
+	const GLuint shaderFragment = api.glCreateShader(GL_FRAGMENT_SHADER);
+	api.glShaderSource(shaderFragment, 1, &shaderCodeFragment, nullptr);
+	api.glCompileShader(shaderFragment);
+
+	const GLuint program = api.glCreateProgram();
+	api.glAttachShader(program, shaderVertex);
+	api.glAttachShader(program, shaderFragment);
+	api.glLinkProgram(program);
 
 	GLuint vao;
-	glCreateVertexArrays(1, &vao);
-	glBindVertexArray(vao);
+	api.glCreateVertexArrays(1, &vao);
+	api.glBindVertexArray(vao);
 
-	const GLsizeiptr kBufferSize = sizeof(PerFrameData);
+	const GLsizeiptr kBufferSize = sizeof(mat4);
 
 	GLuint perFrameDataBuffer;
-	glCreateBuffers(1, &perFrameDataBuffer);
-	glNamedBufferStorage(perFrameDataBuffer, kBufferSize, nullptr, GL_DYNAMIC_STORAGE_BIT);
-	glBindBufferRange(GL_UNIFORM_BUFFER, 0, perFrameDataBuffer, 0, kBufferSize);
+	api.glCreateBuffers(1, &perFrameDataBuffer);
+	api.glNamedBufferStorage(perFrameDataBuffer, kBufferSize, nullptr, GL_DYNAMIC_STORAGE_BIT);
+	api.glBindBufferRange(GL_UNIFORM_BUFFER, 0, perFrameDataBuffer, 0, kBufferSize);
 
-	glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
-	glEnable(GL_DEPTH_TEST);
+	api.glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
 
-	GLuint meshData;
-	glCreateBuffers(1, &meshData);
+	int w, h, comp;
+	const uint8_t *img = stbi_load("data/stb_sample.jpg", &w, &h, &comp, 3);
 
-	const aiScene *scene = aiImportFile("data/rubber_duck/scene.gltf", aiProcess_Triangulate);
+	GLuint texture;
+	api.glCreateTextures(GL_TEXTURE_2D, 1, &texture);
+	api.glTextureParameteri(texture, GL_TEXTURE_MAX_LEVEL, 0);
+	api.glTextureParameteri(texture, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	api.glTextureParameteri(texture, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	api.glTextureStorage2D(texture, 1, GL_RGB8, w, h);
+	api.glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	api.glTextureSubImage2D(texture, 0, 0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE, img);
 
-	if (!scene || !scene->HasMeshes())
-	{
-		printf("Unable to load data/rubber_duck/scene.gltf\n");
-		exit(255);
-	}
-
-	// preserve the existing vertices and indices exactly as they were loaded by Assimp
-	const aiMesh *mesh = scene->mMeshes[0];
-	std::vector<vec3> positions;
-	for (unsigned i = 0; i != mesh->mNumVertices; i++)
-	{
-		const aiVector3D v = mesh->mVertices[i];
-		positions.push_back(vec3(v.x, v.z, v.y));
-	}
-	std::vector<unsigned int> indices;
-	for (unsigned i = 0; i != mesh->mNumFaces; i++)
-	{
-		for (unsigned j = 0; j != 3; j++)
-			indices.push_back(mesh->mFaces[i].mIndices[j]);
-	}
-	aiReleaseImport(scene);
-
-	std::vector<unsigned int> indicesLod;
-	{
-		// Now we should generate a remap table for our existing vertex and index data:
-		// The remap table is generated based on binary equivalence of the input
-		// vertices, so the resulting mesh will be rendered in the same way.
-		std::vector<unsigned int> remap(indices.size());
-		// The returned vertexCount value corresponds to the number of unique vertices
-		// that have remained after remapping
-		const size_t vertexCount = meshopt_generateVertexRemap(remap.data(), indices.data(), indices.size(), positions.data(), indices.size(), sizeof(vec3));
-
-		// allocate space and generate new vertex and index buffers
-		std::vector<unsigned int> remappedIndices(indices.size());
-		std::vector<vec3> remappedVertices(vertexCount);
-
-		meshopt_remapIndexBuffer(remappedIndices.data(), indices.data(), indices.size(), remap.data());
-		meshopt_remapVertexBuffer(remappedVertices.data(), positions.data(), positions.size(), sizeof(vec3), remap.data());
-
-		// GPUs can reuse transformed vertices by means of a small built-in
-		// cache, usually storing between 16 and 32 vertices inside it.
-		// reorder the triangles to maximize the locality of vertex references.
-		meshopt_optimizeVertexCache(remappedIndices.data(), remappedIndices.data(), indices.size(), vertexCount);
-		// MeshOptimizer implements heuristics to reorder the triangles
-		// and minimize overdraw from all directions. 
-		// 1.05, is the threshold that determines how much the algorithm can compromise the vertex cache hit ratio.
-		meshopt_optimizeOverdraw(remappedIndices.data(), remappedIndices.data(), indices.size(), glm::value_ptr(remappedVertices[0]), vertexCount, sizeof(vec3), 1.05f);
-		// optimize our index and vertex buffers for vertex fetch efficiency
-		meshopt_optimizeVertexFetch(remappedVertices.data(), remappedIndices.data(), indices.size(), remappedVertices.data(), vertexCount, sizeof(vec3));
-
-		// LOD
-		const float threshold = 0.2f;
-		const size_t target_index_count = size_t(remappedIndices.size() * threshold);
-		const float target_error = 1e-2f;
-
-		indicesLod.resize(remappedIndices.size());
-		indicesLod.resize(meshopt_simplify(&indicesLod[0], remappedIndices.data(), remappedIndices.size(), &remappedVertices[0].x, vertexCount, sizeof(vec3), target_index_count, target_error));
-
-		indices = remappedIndices;
-		positions = remappedVertices;
-	}
-
-	// With modern OpenGL, we can store vertex and index data inside a single buffer.
-	const size_t sizeIndices = sizeof(unsigned int) * indices.size();
-	const size_t sizeIndicesLod = sizeof(unsigned int) * indicesLod.size();
-	const size_t sizeVertices = sizeof(vec3) * positions.size();
-
-	glNamedBufferStorage(meshData, sizeIndices + sizeIndicesLod + sizeVertices, nullptr, GL_DYNAMIC_STORAGE_BIT);
-	glNamedBufferSubData(meshData, 0, sizeIndices, indices.data());
-	glNamedBufferSubData(meshData, sizeIndices, sizeIndicesLod, indicesLod.data());
-	glNamedBufferSubData(meshData, sizeIndices + sizeIndicesLod, sizeVertices, positions.data());
-
-	// tell OpenGL where to read the vertex and index data from
-	glVertexArrayElementBuffer(vao, meshData);
-	glVertexArrayVertexBuffer(vao, 0, meshData, sizeIndices + sizeIndicesLod, sizeof(vec3));
-	glEnableVertexArrayAttrib(vao, 0);
-	glVertexArrayAttribFormat(vao, 0, 3, GL_FLOAT, GL_FALSE, 0);
-	glVertexArrayAttribBinding(vao, 0, 0);
+	api.glBindTextures(0, 1, &texture);
 
 	while (!glfwWindowShouldClose(window))
 	{
@@ -244,33 +134,27 @@ int main(void)
 		glfwGetFramebufferSize(window, &width, &height);
 		const float ratio = width / (float)height;
 
-		glViewport(0, 0, width, height);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		api.glViewport(0, 0, width, height);
+		api.glClear(GL_COLOR_BUFFER_BIT);
 
-		const mat4 m1 = glm::rotate(glm::translate(mat4(1.0f), vec3(-0.5f, -0.5f, -1.5f)), (float)glfwGetTime(), vec3(0.0f, 1.0f, 0.0f));
-		const mat4 m2 = glm::rotate(glm::translate(mat4(1.0f), vec3(+0.5f, -0.5f, -1.5f)), (float)glfwGetTime(), vec3(0.0f, 1.0f, 0.0f));
-		const mat4 p = glm::perspective(45.0f, ratio, 0.1f, 1000.0f);
+		const mat4 m = glm::rotate(mat4(1.0f), (float)glfwGetTime(), vec3(0.0f, 0.0f, 1.0f));
+		const mat4 p = glm::ortho(-ratio, ratio, -1.f, 1.f, 1.f, -1.f);
+		const mat4 mvp = p * m;
 
-		const PerFrameData perFrameData1 = {.mvp = p * m1};
-		glNamedBufferSubData(perFrameDataBuffer, 0, kBufferSize, &perFrameData1);
-		// render the optimized mesh
-		glDrawElements(GL_TRIANGLES, static_cast<unsigned>(indices.size()), GL_UNSIGNED_INT, nullptr);
-
-		const PerFrameData perFrameData2 = {.mvp = p * m2};
-		glNamedBufferSubData(perFrameDataBuffer, 0, kBufferSize, &perFrameData2);
-		// render the simplified LOD mesh
-		glDrawElements(GL_TRIANGLES, static_cast<unsigned>(indicesLod.size()), GL_UNSIGNED_INT, (void *)sizeIndices);
+		api.glUseProgram(program);
+		api.glNamedBufferSubData(perFrameDataBuffer, 0, kBufferSize, glm::value_ptr(mvp));
+		api.glDrawArrays(GL_TRIANGLES, 0, 3);
 
 		glfwSwapBuffers(window);
 		glfwPollEvents();
 	}
 
-	glDeleteBuffers(1, &meshData);
-	glDeleteBuffers(1, &perFrameDataBuffer);
-	glDeleteProgram(program);
-	glDeleteShader(shaderFragment);
-	glDeleteShader(shaderVertex);
-	glDeleteVertexArrays(1, &vao);
+	api.glDeleteTextures(1, &texture);
+	api.glDeleteBuffers(1, &perFrameDataBuffer);
+	api.glDeleteProgram(program);
+	api.glDeleteShader(shaderFragment);
+	api.glDeleteShader(shaderVertex);
+	api.glDeleteVertexArrays(1, &vao);
 
 	glfwDestroyWindow(window);
 	glfwTerminate();
