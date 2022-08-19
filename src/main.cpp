@@ -2,81 +2,28 @@
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/ext.hpp>
+#include <assimp/scene.h>
+#include <assimp/postprocess.h>
+#include <assimp/cimport.h>
+#include <assimp/version.h>
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <vector>
 
 #include "OpenGL/GLShader.h"
+#include "OpenGL/Debug.h"
+
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb/stb_image.h>
 
 using glm::mat4;
+using glm::vec2;
 using glm::vec3;
-
-static const char *shaderCodeVertex = R"(
-#version 460 core
-layout(std140, binding = 0) uniform PerFrameData
-{
-	uniform mat4 MVP;
-	uniform int isWireframe;
-};
-layout (location=0) out vec3 color;
-const vec3 pos[8] = vec3[8](
-	vec3(-1.0,-1.0, 1.0),
-	vec3( 1.0,-1.0, 1.0),
-	vec3( 1.0, 1.0, 1.0),
-	vec3(-1.0, 1.0, 1.0),
-
-	vec3(-1.0,-1.0,-1.0),
-	vec3( 1.0,-1.0,-1.0),
-	vec3( 1.0, 1.0,-1.0),
-	vec3(-1.0, 1.0,-1.0)
-);
-const vec3 col[8] = vec3[8](
-	vec3( 1.0, 0.0, 0.0),
-	vec3( 0.0, 1.0, 0.0),
-	vec3( 0.0, 0.0, 1.0),
-	vec3( 1.0, 1.0, 0.0),
-
-	vec3( 1.0, 1.0, 0.0),
-	vec3( 0.0, 0.0, 1.0),
-	vec3( 0.0, 1.0, 0.0),
-	vec3( 1.0, 0.0, 0.0)
-);
-const int indices[36] = int[36](
-	// front
-	0, 1, 2, 2, 3, 0,
-	// right
-	1, 5, 6, 6, 2, 1,
-	// back
-	7, 6, 5, 5, 4, 7,
-	// left
-	4, 0, 3, 3, 7, 4,
-	// bottom
-	4, 5, 1, 1, 0, 4,
-	// top
-	3, 2, 6, 6, 7, 3
-);
-void main()
-{
-	int idx = indices[gl_VertexID];
-	gl_Position = MVP * vec4(pos[idx], 1.0);
-	color = isWireframe > 0 ? vec3(0.0) : col[idx];
-}
-)";
-
-static const char *shaderCodeFragment = R"(
-#version 460 core
-layout (location=0) in vec3 color;
-layout (location=0) out vec4 out_FragColor;
-void main()
-{
-	out_FragColor = vec4(color, 1.0);
-};
-)";
 
 struct PerFrameData
 {
 	mat4 mvp;
-	int isWireframe;
 };
 
 int main(void)
@@ -93,6 +40,7 @@ int main(void)
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+	glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GLFW_TRUE);
 
 	GLFWwindow *window = glfwCreateWindow(1024, 768, "Simple example", nullptr, nullptr);
 	if (!window)
@@ -113,37 +61,91 @@ int main(void)
 	gladLoadGL(glfwGetProcAddress);
 	glfwSwapInterval(1);
 
-	GLShader shaderTest("data/shaders/GL02.vert");
+	initDebug();
 
-	const GLuint shaderVertex = glCreateShader(GL_VERTEX_SHADER);
-	glShaderSource(shaderVertex, 1, &shaderCodeVertex, nullptr);
-	glCompileShader(shaderVertex);
+	GLShader shaderVertex("data/shaders/GL02.vert");
+	GLShader shaderGeometry("data/shaders/GL02.geom");
+	GLShader shaderFragment("data/shaders/GL02.frag");
+	GLProgram program(shaderVertex, shaderGeometry, shaderFragment);
+	program.useProgram();
 
-	const GLuint shaderFragment = glCreateShader(GL_FRAGMENT_SHADER);
-	glShaderSource(shaderFragment, 1, &shaderCodeFragment, nullptr);
-	glCompileShader(shaderFragment);
-
-	const GLuint program = glCreateProgram();
-	glAttachShader(program, shaderVertex);
-	glAttachShader(program, shaderFragment);
-	glLinkProgram(program);
-	glUseProgram(program);
-
-	GLuint vao;
-	glCreateVertexArrays(1, &vao);
-	glBindVertexArray(vao);
-
-	const GLsizeiptr kBufferSize = sizeof(PerFrameData);
+	const GLsizeiptr kUniformBufferSize = sizeof(PerFrameData);
 
 	GLuint perFrameDataBuffer;
 	glCreateBuffers(1, &perFrameDataBuffer);
-	glNamedBufferStorage(perFrameDataBuffer, kBufferSize, nullptr, GL_DYNAMIC_STORAGE_BIT);
-	glBindBufferRange(GL_UNIFORM_BUFFER, 0, perFrameDataBuffer, 0, kBufferSize);
+	glNamedBufferStorage(perFrameDataBuffer, kUniformBufferSize, nullptr, GL_DYNAMIC_STORAGE_BIT);
+	glBindBufferRange(GL_UNIFORM_BUFFER, 0, perFrameDataBuffer, 0, kUniformBufferSize);
 
 	glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
 	glEnable(GL_DEPTH_TEST);
-	glEnable(GL_POLYGON_OFFSET_LINE);
-	glPolygonOffset(-1.0f, -1.0f);
+
+	const aiScene *scene = aiImportFile("data/rubber_duck/scene.gltf", aiProcess_Triangulate);
+
+	if (!scene || !scene->HasMeshes())
+	{
+		printf("Unable to load data/rubber_duck/scene.gltf\n");
+		exit(255);
+	}
+
+	struct VertexData
+	{
+		vec3 pos;
+		vec2 tc;
+	};
+
+	const aiMesh *mesh = scene->mMeshes[0];
+	std::vector<VertexData> vertices;
+	for (unsigned i = 0; i != mesh->mNumVertices; i++)
+	{
+		const aiVector3D v = mesh->mVertices[i];
+		const aiVector3D t = mesh->mTextureCoords[0][i];
+		vertices.push_back({.pos = vec3(v.x, v.z, v.y), .tc = vec2(t.x, t.y)});
+	}
+	std::vector<unsigned int> indices;
+	for (unsigned i = 0; i != mesh->mNumFaces; i++)
+	{
+		for (unsigned j = 0; j != 3; j++)
+			indices.push_back(mesh->mFaces[i].mIndices[j]);
+	}
+	aiReleaseImport(scene);
+
+	const size_t kSizeIndices = sizeof(unsigned int) * indices.size();
+	const size_t kSizeVertices = sizeof(VertexData) * vertices.size();
+
+	// https://github.com/nlguillemot/ProgrammablePulling
+	// indices
+	GLuint dataIndices;
+	glCreateBuffers(1, &dataIndices);
+	glNamedBufferStorage(dataIndices, kSizeIndices, indices.data(), 0);
+	GLuint vao;
+	glCreateVertexArrays(1, &vao);
+	glBindVertexArray(vao);
+	glVertexArrayElementBuffer(vao, dataIndices);
+
+	// vertices
+	GLuint dataVertices;
+	glCreateBuffers(1, &dataVertices);
+	glNamedBufferStorage(dataVertices, kSizeVertices, vertices.data(), 0);
+	// using sequential binding point indices for uniforms and storage buffers for the sake of simplicity
+	// The binding points for uniforms and buffers are separate entities, so it is
+	// perfectly fine to use 0 for both PerFrameData and Vertices.
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, dataVertices);
+
+	// texture
+	int w, h, comp;
+	const uint8_t *img = stbi_load("data/rubber_duck/textures/Duck_baseColor.png", &w, &h, &comp, 3);
+
+	GLuint texture;
+	glCreateTextures(GL_TEXTURE_2D, 1, &texture);
+	glTextureParameteri(texture, GL_TEXTURE_MAX_LEVEL, 0);
+	glTextureParameteri(texture, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTextureParameteri(texture, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTextureStorage2D(texture, 1, GL_RGB8, w, h);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	glTextureSubImage2D(texture, 0, 0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE, img);
+	glBindTextures(0, 1, &texture);
+
+	stbi_image_free((void *)img);
 
 	while (!glfwWindowShouldClose(window))
 	{
@@ -154,30 +156,20 @@ int main(void)
 		glViewport(0, 0, width, height);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		const mat4 m = glm::rotate(glm::translate(mat4(1.0f), vec3(0.0f, 0.0f, -3.5f)), (float)glfwGetTime(), vec3(1.0f, 1.0f, 1.0f));
+		const mat4 m = glm::rotate(glm::translate(mat4(1.0f), vec3(0.0f, -0.5f, -1.5f)), (float)glfwGetTime(), vec3(0.0f, 1.0f, 0.0f));
 		const mat4 p = glm::perspective(45.0f, ratio, 0.1f, 1000.0f);
 
-		PerFrameData perFrameData = {.mvp = p * m, .isWireframe = false};
-
-		glNamedBufferSubData(perFrameDataBuffer, 0, kBufferSize, &perFrameData);
-
-		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-		glDrawArrays(GL_TRIANGLES, 0, 36);
-
-		perFrameData.isWireframe = true;
-		glNamedBufferSubData(perFrameDataBuffer, 0, kBufferSize, &perFrameData);
-
-		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-		glDrawArrays(GL_TRIANGLES, 0, 36);
+		const PerFrameData perFrameData = {.mvp = p * m};
+		glNamedBufferSubData(perFrameDataBuffer, 0, kUniformBufferSize, &perFrameData);
+		glDrawElements(GL_TRIANGLES, static_cast<unsigned>(indices.size()), GL_UNSIGNED_INT, nullptr);
 
 		glfwSwapBuffers(window);
 		glfwPollEvents();
 	}
 
+	glDeleteBuffers(1, &dataIndices);
+	glDeleteBuffers(1, &dataVertices);
 	glDeleteBuffers(1, &perFrameDataBuffer);
-	glDeleteProgram(program);
-	glDeleteShader(shaderFragment);
-	glDeleteShader(shaderVertex);
 	glDeleteVertexArrays(1, &vao);
 
 	glfwDestroyWindow(window);

@@ -130,7 +130,7 @@ endif()
 
 
 
-target_link_libraries(SampleTest glad glfw assimp meshoptimizer)
+target_link_libraries(SampleTest glad glfw assimp)
 
 
 
