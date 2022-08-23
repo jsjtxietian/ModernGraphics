@@ -24,7 +24,7 @@ SETUP_GROUPS("${SRC_FILES}")
 SETUP_GROUPS("${HEADER_FILES}")
 include_directories(src)
 include_directories(3rdparty)
-add_executable(SampleTest ${SRC_FILES} ${HEADER_FILES})
+add_executable(SampleTest ${SRC_FILES} ${HEADER_FILES} ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/glslang/StandAlone/ResourceLimits.cpp)
 
 # glad
 include_directories(3rdparty/glad/include)
@@ -114,6 +114,30 @@ set(MESHOPT_BUILD_SHARED_LIBS OFF CACHE BOOL "")
 add_subdirectory(3rdparty/meshoptimizer)
 set_property(TARGET meshoptimizer PROPERTY FOLDER "ThirdPartyLibraries")
 
+#vulkan
+include_directories(3rdparty/vulkan/include)
+
+#volk
+add_subdirectory(3rdparty/volk)
+set_property(TARGET volk          PROPERTY FOLDER "ThirdPartyLibraries")
+
+#glslang
+set(ENABLE_GLSLANG_BINARIES  OFF  CACHE BOOL "")
+set(ENABLE_HLSL              OFF  CACHE BOOL "")
+set(ENABLE_CTEST             OFF  CACHE BOOL "")
+set(ENABLE_OPT               OFF  CACHE BOOL "")
+set(SKIP_GLSLANG_INSTALL     ON   CACHE BOOL "")
+add_subdirectory(3rdparty/glslang)
+include_directories(3rdparty/glslang/glslang/Include)
+include_directories(3rdparty/glslang)
+include_directories(3rdparty/glslang/StandAlone)
+include_directories(3rdparty/glslang/src)
+set_property(TARGET glslang       PROPERTY FOLDER "ThirdPartyLibraries/glslang")
+set_property(TARGET OGLCompiler   PROPERTY FOLDER "ThirdPartyLibraries/glslang")
+set_property(TARGET OSDependent   PROPERTY FOLDER "ThirdPartyLibraries/glslang")
+set_property(TARGET SPIRV         PROPERTY FOLDER "ThirdPartyLibraries/glslang")
+set_property(TARGET SPVRemapper   PROPERTY FOLDER "ThirdPartyLibraries/glslang")
+
 # other included 
 set_property(TARGET IrrXML        PROPERTY FOLDER "ThirdPartyLibraries")
 set_property(TARGET zlibstatic    PROPERTY FOLDER "ThirdPartyLibraries")
@@ -130,7 +154,7 @@ endif()
 
 
 
-target_link_libraries(SampleTest glad glfw assimp)
+target_link_libraries(SampleTest glad glfw glslang SPIRV)
 
 
 
