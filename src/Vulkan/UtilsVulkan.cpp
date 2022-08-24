@@ -25,6 +25,157 @@ using glm::vec4;
 #include <cstdio>
 #include <cstdlib>
 
+void CHECK(bool check, const char *fileName, int lineNumber)
+{
+	if (!check)
+	{
+		printf("CHECK() failed at %s:%i\n", fileName, lineNumber);
+		assert(false);
+		exit(EXIT_FAILURE);
+	}
+}
+
+// Using the Vulkan instance, we can acquire a list of physical devices with the
+// required properties
+void createInstance(VkInstance *instance)
+{
+	// allow us to enable debugging output for every Vulkan call.
+	// The only layer we will be using is the debugging layer
+	const std::vector<const char *> ValidationLayers =
+		{
+			"VK_LAYER_KHRONOS_validation"};
+
+	const std::vector<const char *> exts =
+	{
+		"VK_KHR_surface",
+#if defined(_WIN32)
+		"VK_KHR_win32_surface",
+#endif
+		VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+		VK_EXT_DEBUG_REPORT_EXTENSION_NAME
+		/* for indexed textures */
+		,
+		VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME
+	};
+
+	const VkApplicationInfo appinfo =
+		{
+			.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+			.pNext = nullptr,
+			.pApplicationName = "Vulkan",
+			.applicationVersion = VK_MAKE_VERSION(1, 0, 0),
+			.pEngineName = "No Engine",
+			.engineVersion = VK_MAKE_VERSION(1, 0, 0),
+			.apiVersion = VK_API_VERSION_1_1};
+
+	const VkInstanceCreateInfo createInfo =
+		{
+			.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+			.pNext = nullptr,
+			.flags = 0,
+			.pApplicationInfo = &appinfo,
+			.enabledLayerCount = static_cast<uint32_t>(ValidationLayers.size()),
+			.ppEnabledLayerNames = ValidationLayers.data(),
+			.enabledExtensionCount = static_cast<uint32_t>(exts.size()),
+			.ppEnabledExtensionNames = exts.data()};
+
+	VK_CHECK(vkCreateInstance(&createInfo, nullptr, instance));
+
+	// ask the Volk library to retrieve all the Vulkan API function pointers
+	// for all the extensions that are available for the created VkInstance
+	volkLoadInstance(*instance);
+}
+
+// Once we have a Vulkan instance ready and the graphics queue index set up with the
+// selected physical device, we can create a logical representation of a GPU. Vulkan treats
+// all devices as a collection of queues and memory heaps. To use a device for rendering,
+// we need to specify a queue that can execute graphics-related commands, and a physical
+// device that has such a queue.
+
+// device features (for example, geometry shader support)
+VkResult createDevice(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures deviceFeatures,
+					  uint32_t graphicsFamily, VkDevice *device)
+{
+	const std::vector<const char *> extensions =
+		{
+			//  allows us to present rendered frames on the screen.
+			VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+		};
+
+	// only use a single graphics queue that has maximum priority
+	const float queuePriority = 1.0f;
+
+	const VkDeviceQueueCreateInfo qci =
+		{
+			.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+			.pNext = nullptr,
+			.flags = 0,
+			.queueFamilyIndex = graphicsFamily,
+			.queueCount = 1,
+			.pQueuePriorities = &queuePriority};
+
+	// To create something in Vulkan, we should fill in a ...CreateInfo structure
+	// and pass all the required object properties to an appropriate vkCreate...() function.
+
+	const VkDeviceCreateInfo ci =
+		{
+			.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+			.pNext = nullptr,
+			.flags = 0,
+			.queueCreateInfoCount = 1,
+			.pQueueCreateInfos = &qci,
+			.enabledLayerCount = 0,
+			.ppEnabledLayerNames = nullptr,
+			.enabledExtensionCount = static_cast<uint32_t>(extensions.size()),
+			.ppEnabledExtensionNames = extensions.data(),
+			.pEnabledFeatures = &deviceFeatures};
+
+	return vkCreateDevice(physicalDevice, &ci, nullptr, device);
+}
+
+// The createDevice() function expects a reference to a physical graphics-capable
+// device. The following function finds such a device
+VkResult findSuitablePhysicalDevice(VkInstance instance, std::function<bool(VkPhysicalDevice)> selector,
+									VkPhysicalDevice *physicalDevice)
+{
+	uint32_t deviceCount = 0;
+	VK_CHECK_RET(vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr));
+
+	if (!deviceCount)
+		return VK_ERROR_INITIALIZATION_FAILED;
+
+	std::vector<VkPhysicalDevice> devices(deviceCount);
+	VK_CHECK_RET(vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data()));
+
+	for (const auto &device : devices)
+	{
+		if (selector(device))
+		{
+			*physicalDevice = device;
+			return VK_SUCCESS;
+		}
+	}
+
+	return VK_ERROR_INITIALIZATION_FAILED;
+}
+
+// Once we have a physical device reference, we will get a list of its queues. Here, we
+// must check for the one with our desired capability flags
+uint32_t findQueueFamilies(VkPhysicalDevice device, VkQueueFlags desiredFlags)
+{
+	uint32_t familyCount = 0;
+	vkGetPhysicalDeviceQueueFamilyProperties(device, &familyCount, nullptr);
+
+	std::vector<VkQueueFamilyProperties> families(familyCount);
+	vkGetPhysicalDeviceQueueFamilyProperties(device, &familyCount, families.data());
+
+	for (uint32_t i = 0; i != families.size(); i++)
+		if (families[i].queueCount > 0 && families[i].queueFlags & desiredFlags)
+			return i;
+
+	return 0;
+}
+
 VkShaderStageFlagBits glslangShaderStageToVulkan(glslang_stage_t sh)
 {
 	switch (sh)

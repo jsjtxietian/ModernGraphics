@@ -154,7 +154,7 @@ endif()
 
 
 
-target_link_libraries(SampleTest glad glfw glslang SPIRV)
+target_link_libraries(SampleTest glfw volk glslang SPIRV assimp)
 
 
 
