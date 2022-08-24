@@ -35,6 +35,8 @@ void CHECK(bool check, const char *fileName, int lineNumber)
 	}
 }
 
+// ============================ instances & devices ====================================
+
 // Using the Vulkan instance, we can acquire a list of physical devices with the
 // required properties
 void createInstance(VkInstance *instance)
@@ -176,6 +178,165 @@ uint32_t findQueueFamilies(VkPhysicalDevice device, VkQueueFlags desiredFlags)
 	return 0;
 }
 
+// ============================ swapchain ====================================
+// Normally, each frame is rendered as an offscreen image. Once the rendering process is
+// complete, the offscreen image should be made visible. An object that holds a collection of
+// available offscreen images – or, more specifically, a queue of rendered images waiting to
+// be presented to the screen – is called a swap chain. In OpenGL, presenting an offscreen
+// buffer to the visible area of a window is performed using system-dependent functions,
+// namely wglSwapBuffers() on Windows, and automatically on macOS. Using Vulkan,
+// we need to select a sequencing algorithm for the swap chain images. Also, the
+// operation that presents an image to the display is no different from any other operation,
+// such as rendering a collection of triangles. The Vulkan API object model treats each
+// graphics device as a collection of command queues where rendering, computation, or
+// transfer operations can be enqueued.
+
+SwapchainSupportDetails querySwapchainSupport(VkPhysicalDevice device, VkSurfaceKHR surface)
+{
+	SwapchainSupportDetails details;
+	// Query the basic capabilities of a surface
+	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
+
+	// Get the number of available surface formats. Allocate the storage to hold them
+	uint32_t formatCount;
+	vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, nullptr);
+
+	if (formatCount)
+	{
+		details.formats.resize(formatCount);
+		vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, details.formats.data());
+	}
+
+	// Retrieve the supported presentation modes in a similar way
+	uint32_t presentModeCount;
+	vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, nullptr);
+
+	if (presentModeCount)
+	{
+		details.presentModes.resize(presentModeCount);
+		vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, details.presentModes.data());
+	}
+
+	return details;
+}
+
+// choosing the required surface format.
+// use a hardcoded value here for the RGBA 8-bit per channel format with the sRGB color space
+VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR> &availableFormats)
+{
+	return {VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
+}
+
+// select presentation mode. The preferred presentation mode is
+// VK_PRESENT_MODE_MAILBOX_KHR, which specifies that the Vulkan presentation
+// system should wait for the next vertical blanking period to update the current
+// image. Visual tearing will not be observed in this case. However, it's not guaranteed
+// that this presentation mode will be supported. In this situation, we can always fall
+// back to VK_PRESENT_MODE_FIFO_KHR. The differences between all possible
+// presentation modes are described in the Vulkan specification at
+// https://www.khronos.org/registry/vulkan/specs/1.1-extensions/man/html/VkPresentModeKHR.html
+VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR> &availablePresentModes)
+{
+	for (const auto mode : availablePresentModes)
+		if (mode == VK_PRESENT_MODE_MAILBOX_KHR)
+			return mode;
+
+	// FIFO will always be supported
+	return VK_PRESENT_MODE_FIFO_KHR;
+}
+
+// choose the number of images in the swap chain object. It is based on
+// the surface capabilities we retrieved earlier. Instead of
+// using minImageCount directly, we will request one additional image to make sure
+// we are not waiting on the GPU to complete any operations
+uint32_t chooseSwapImageCount(const VkSurfaceCapabilitiesKHR &capabilities)
+{
+	const uint32_t imageCount = capabilities.minImageCount + 1;
+	const bool imageCountExceeded = capabilities.maxImageCount > 0 && imageCount > capabilities.maxImageCount;
+	return imageCountExceeded ? capabilities.maxImageCount : imageCount;
+}
+
+VkResult createSwapchain(VkDevice device, VkPhysicalDevice physicalDevice,
+						 VkSurfaceKHR surface, uint32_t graphicsFamily,
+						 uint32_t width, uint32_t height,
+						 VkSwapchainKHR *swapchain, bool supportScreenshots = false)
+{
+	auto swapchainSupport = querySwapchainSupport(physicalDevice, surface);
+	auto surfaceFormat = chooseSwapSurfaceFormat(swapchainSupport.formats);
+	auto presentMode = chooseSwapPresentMode(swapchainSupport.presentModes);
+
+	// initial example will not use a depth buffer, so only VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
+	// will be used. The VK_IMAGE_USAGE_TRANSFER_DST_BIT flag specifies that the
+	// image can be used as the destination of a transfer command
+	const VkSwapchainCreateInfoKHR ci =
+		{
+			.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+			.flags = 0,
+			.surface = surface,
+			.minImageCount = chooseSwapImageCount(swapchainSupport.capabilities),
+			.imageFormat = surfaceFormat.format,
+			.imageColorSpace = surfaceFormat.colorSpace,
+			.imageExtent = {.width = width, .height = height},
+			.imageArrayLayers = 1,
+			.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | (supportScreenshots ? VK_IMAGE_USAGE_TRANSFER_SRC_BIT : 0u),
+			.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
+			.queueFamilyIndexCount = 1,
+			.pQueueFamilyIndices = &graphicsFamily,
+			.preTransform = swapchainSupport.capabilities.currentTransform,
+			.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+			.presentMode = presentMode,
+			.clipped = VK_TRUE,
+			.oldSwapchain = VK_NULL_HANDLE};
+
+	return vkCreateSwapchainKHR(device, &ci, nullptr, swapchain);
+}
+
+// Once the swapchain object has been created, we should retrieve the actual images from the swapchain
+size_t createSwapchainImages(
+	VkDevice device, VkSwapchainKHR swapchain,
+	std::vector<VkImage> &swapchainImages,
+	std::vector<VkImageView> &swapchainImageViews)
+{
+	uint32_t imageCount = 0;
+	VK_CHECK(vkGetSwapchainImagesKHR(device, swapchain, &imageCount, nullptr));
+
+	swapchainImages.resize(imageCount);
+	swapchainImageViews.resize(imageCount);
+
+	VK_CHECK(vkGetSwapchainImagesKHR(device, swapchain, &imageCount, swapchainImages.data()));
+
+	for (unsigned i = 0; i < imageCount; i++)
+		if (!createImageView(device, swapchainImages[i], VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, &swapchainImageViews[i]))
+			exit(0);
+
+	return static_cast<size_t>(imageCount);
+}
+
+// creates an image view for us
+bool createImageView(VkDevice device, VkImage image, VkFormat format,
+					 VkImageAspectFlags aspectFlags, VkImageView *imageView,
+					 VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D,
+					 uint32_t layerCount = 1, uint32_t mipLevels = 1)
+{
+	const VkImageViewCreateInfo viewInfo =
+		{
+			.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+			.pNext = nullptr,
+			.flags = 0,
+			.image = image,
+			.viewType = viewType,
+			.format = format,
+			.subresourceRange =
+				{
+					.aspectMask = aspectFlags,
+					.baseMipLevel = 0,
+					.levelCount = mipLevels,
+					.baseArrayLayer = 0,
+					.layerCount = layerCount}};
+
+	return (vkCreateImageView(device, &viewInfo, nullptr, imageView) == VK_SUCCESS);
+}
+
 VkShaderStageFlagBits glslangShaderStageToVulkan(glslang_stage_t sh)
 {
 	switch (sh)
@@ -197,6 +358,7 @@ VkShaderStageFlagBits glslangShaderStageToVulkan(glslang_stage_t sh)
 	return VK_SHADER_STAGE_VERTEX_BIT;
 }
 
+// ============================ shader ====================================
 glslang_stage_t glslangShaderStageFromFileName(const char *fileName)
 {
 	if (endsWith(fileName, ".vert"))
