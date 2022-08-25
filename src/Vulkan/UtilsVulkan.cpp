@@ -107,7 +107,7 @@ bool setupDebugCallbacks(VkInstance instance, VkDebugUtilsMessengerEXT *messenge
 	return true;
 }
 
-// add symbolic names to Vulkan objects. This is useful for debugging Vulkan applications 
+// add symbolic names to Vulkan objects. This is useful for debugging Vulkan applications
 // in situations where the validation layer reports object handles
 // bool setVkObjectName(VulkanRenderDevice &vkDev, void *object, VkObjectType objType, const char *name)
 // {
@@ -421,6 +421,85 @@ bool createImageView(VkDevice device, VkImage image, VkFormat format,
 					.layerCount = layerCount}};
 
 	return (vkCreateImageView(device, &viewInfo, nullptr, imageView) == VK_SUCCESS);
+}
+
+// ================ Tracking and cleaning up Vulkan objects ==============
+
+VkResult createSemaphore(VkDevice device, VkSemaphore *outSemaphore)
+{
+	const VkSemaphoreCreateInfo ci =
+		{
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+
+	return vkCreateSemaphore(device, &ci, nullptr, outSemaphore);
+}
+
+bool initVulkanRenderDevice(VulkanInstance &vk, VulkanRenderDevice &vkDev, uint32_t width, uint32_t height, std::function<bool(VkPhysicalDevice)> selector, VkPhysicalDeviceFeatures deviceFeatures)
+{
+	vkDev.framebufferWidth = width;
+	vkDev.framebufferHeight = height;
+
+	VK_CHECK(findSuitablePhysicalDevice(vk.instance, selector, &vkDev.physicalDevice));
+	vkDev.graphicsFamily = findQueueFamilies(vkDev.physicalDevice, VK_QUEUE_GRAPHICS_BIT);
+	VK_CHECK(createDevice(vkDev.physicalDevice, deviceFeatures, vkDev.graphicsFamily, &vkDev.device));
+
+	vkGetDeviceQueue(vkDev.device, vkDev.graphicsFamily, 0, &vkDev.graphicsQueue);
+	if (vkDev.graphicsQueue == nullptr)
+		exit(EXIT_FAILURE);
+
+	VkBool32 presentSupported = 0;
+	vkGetPhysicalDeviceSurfaceSupportKHR(vkDev.physicalDevice, vkDev.graphicsFamily, vk.surface, &presentSupported);
+	if (!presentSupported)
+		exit(EXIT_FAILURE);
+
+	VK_CHECK(createSwapchain(vkDev.device, vkDev.physicalDevice, vk.surface, vkDev.graphicsFamily, width, height, &vkDev.swapchain));
+	const size_t imageCount = createSwapchainImages(vkDev.device, vkDev.swapchain, vkDev.swapchainImages, vkDev.swapchainImageViews);
+	vkDev.commandBuffers.resize(imageCount);
+
+	VK_CHECK(createSemaphore(vkDev.device, &vkDev.semaphore));
+	VK_CHECK(createSemaphore(vkDev.device, &vkDev.renderSemaphore));
+
+	// command pool is necessary to allocate command buffers
+	const VkCommandPoolCreateInfo cpi =
+		{
+			.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+			.flags = 0,
+			.queueFamilyIndex = vkDev.graphicsFamily};
+
+	VK_CHECK(vkCreateCommandPool(vkDev.device, &cpi, nullptr, &vkDev.commandPool));
+
+	// allocate one command buffer per swap chain image:
+	const VkCommandBufferAllocateInfo ai =
+		{
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+			.pNext = nullptr,
+			.commandPool = vkDev.commandPool,
+			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+			.commandBufferCount = static_cast<uint32_t>(vkDev.swapchainImages.size()),
+		};
+
+	VK_CHECK(vkAllocateCommandBuffers(vkDev.device, &ai, &vkDev.commandBuffers[0]));
+	return true;
+}
+
+void destroyVulkanRenderDevice(VulkanRenderDevice &vkDev)
+{
+	for (size_t i = 0; i < vkDev.swapchainImages.size(); i++)
+		vkDestroyImageView(vkDev.device, vkDev.swapchainImageViews[i], nullptr);
+
+	vkDestroySwapchainKHR(vkDev.device, vkDev.swapchain, nullptr);
+	vkDestroyCommandPool(vkDev.device, vkDev.commandPool, nullptr);
+	vkDestroySemaphore(vkDev.device, vkDev.semaphore, nullptr);
+	vkDestroySemaphore(vkDev.device, vkDev.renderSemaphore, nullptr);
+	vkDestroyDevice(vkDev.device, nullptr);
+}
+
+void destroyVulkanInstance(VulkanInstance &vk)
+{
+	vkDestroySurfaceKHR(vk.instance, vk.surface, nullptr);
+	vkDestroyDebugReportCallbackEXT(vk.instance, vk.reportCallback, nullptr);
+	vkDestroyDebugUtilsMessengerEXT(vk.instance, vk.messenger, nullptr);
+	vkDestroyInstance(vk.instance, nullptr);
 }
 
 VkShaderStageFlagBits glslangShaderStageToVulkan(glslang_stage_t sh)
