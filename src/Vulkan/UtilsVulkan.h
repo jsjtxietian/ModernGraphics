@@ -47,6 +47,13 @@ struct VulkanRenderDevice final
 	std::vector<VkCommandBuffer> commandBuffers;
 };
 
+struct VulkanImage final
+{
+	VkImage image = nullptr;
+	VkDeviceMemory imageMemory = nullptr;
+	VkImageView imageView = nullptr;
+};
+
 struct SwapchainSupportDetails final
 {
 	VkSurfaceCapabilitiesKHR capabilities = {};
@@ -83,3 +90,8 @@ VkResult createSemaphore(VkDevice device, VkSemaphore *outSemaphore);
 bool initVulkanRenderDevice(VulkanInstance &vk, VulkanRenderDevice &vkDev, uint32_t width, uint32_t height, std::function<bool(VkPhysicalDevice)> selector, VkPhysicalDeviceFeatures deviceFeatures);
 void destroyVulkanRenderDevice(VulkanRenderDevice &vkDev);
 void destroyVulkanInstance(VulkanInstance &vk);
+
+bool createBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer &buffer, VkDeviceMemory &bufferMemory);
+VkCommandBuffer beginSingleTimeCommands(VulkanRenderDevice &vkDev);
+void endSingleTimeCommands(VulkanRenderDevice &vkDev, VkCommandBuffer commandBuffer);
+void copyBuffer(VulkanRenderDevice &vkDev, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);

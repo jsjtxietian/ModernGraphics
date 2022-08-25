@@ -20,6 +20,11 @@ const uint32_t kScreenHeight = 720;
 
 GLFWwindow *window;
 
+struct UniformBuffer
+{
+    mat4 mvp;
+};
+
 static constexpr VkClearColorValue clearValueColor = {1.0f, 1.0f, 1.0f, 1.0f};
 
 size_t vertexBufferSize;
@@ -27,6 +32,36 @@ size_t indexBufferSize;
 
 VulkanInstance vk;
 VulkanRenderDevice vkDev;
+
+struct VulkanState
+{
+    // 1. Descriptor set (layout + pool + sets) -> uses uniform buffers, textures, framebuffers
+    VkDescriptorSetLayout descriptorSetLayout;
+    VkDescriptorPool descriptorPool;
+    std::vector<VkDescriptorSet> descriptorSets;
+
+    // 2.
+    std::vector<VkFramebuffer> swapchainFramebuffers;
+
+    // 3. Pipeline & render pass (using DescriptorSets & pipeline state options)
+    VkRenderPass renderPass;
+    VkPipelineLayout pipelineLayout;
+    VkPipeline graphicsPipeline;
+
+    // 4. Uniform buffer
+    std::vector<VkBuffer> uniformBuffers;
+    std::vector<VkDeviceMemory> uniformBuffersMemory;
+
+    // 5. Storage Buffer with index and vertex data
+    VkBuffer storageBuffer;
+    VkDeviceMemory storageBufferMemory;
+
+    // 6. Depth buffer
+    VulkanImage depthTexture;
+
+    VkSampler textureSampler;
+    VulkanImage texture;
+} vkState;
 
 // prepare a command buffer that will begin a new render pass, clear the color and
 // depth attachments, bind pipelines and descriptor sets, and render a mesh
@@ -75,4 +110,36 @@ bool fillCommandBuffers(size_t i)
     VK_CHECK(vkEndCommandBuffer(vkDev.commandBuffers[i]));
 
     return true;
+}
+
+// creates a buffer that will store the UniformBuffer structure
+bool createUniformBuffers()
+{
+    VkDeviceSize bufferSize = sizeof(UniformBuffer);
+
+    vkState.uniformBuffers.resize(vkDev.swapchainImages.size());
+    vkState.uniformBuffersMemory.resize(vkDev.swapchainImages.size());
+
+    for (size_t i = 0; i < vkDev.swapchainImages.size(); i++)
+    {
+        if (!createBuffer(vkDev.device, vkDev.physicalDevice, bufferSize,
+                          VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                          vkState.uniformBuffers[i], vkState.uniformBuffersMemory[i]))
+        {
+            printf("Fail: buffers\n");
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// called every frame to update our data in the buffer
+void updateUniformBuffer(uint32_t currentImage, const void *uboData, size_t uboSize)
+{
+    void *data = nullptr;
+    vkMapMemory(vkDev.device, vkState.uniformBuffersMemory[currentImage], 0, uboSize, 0, &data);
+    memcpy(data, uboData, uboSize);
+    vkUnmapMemory(vkDev.device, vkState.uniformBuffersMemory[currentImage]);
 }

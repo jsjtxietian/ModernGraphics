@@ -502,6 +502,129 @@ void destroyVulkanInstance(VulkanInstance &vk)
 	vkDestroyInstance(vk.instance, nullptr);
 }
 
+// ============================ Buffers ====================================
+
+// Uploading data into GPU buffers is an operation that is executed, just like any other
+// Vulkan operation, using command buffers. This means we need to have a command
+// queue that's capable of performing transfer operations.
+// transfer geometry and image data to Vulkan buffers, as well as to convert data into different formats
+
+// selects an appropriate heap type on the GPU, based on the required properties and a filter
+uint32_t findMemoryType(VkPhysicalDevice device, uint32_t typeFilter, VkMemoryPropertyFlags properties)
+{
+	VkPhysicalDeviceMemoryProperties memProperties;
+	vkGetPhysicalDeviceMemoryProperties(device, &memProperties);
+
+	for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++)
+	{
+		if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties)
+		{
+			return i;
+		}
+	}
+
+	return 0xFFFFFFFF;
+}
+
+// create a buffer object and an associated device memory region. We will use this function
+// to create uniform, shader storage, and other types of buffers. The exact buffer usage is
+// specified by the usage parameter. The access permissions for the memory block are specified by properties flags:
+bool createBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDeviceSize size,
+				  VkBufferUsageFlags usage, VkMemoryPropertyFlags properties,
+				  VkBuffer &buffer, VkDeviceMemory &bufferMemory)
+{
+	const VkBufferCreateInfo bufferInfo = {
+		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+		.pNext = nullptr,
+		.flags = 0,
+		.size = size,
+		.usage = usage,
+		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+		.queueFamilyIndexCount = 0,
+		.pQueueFamilyIndices = nullptr};
+
+	VK_CHECK(vkCreateBuffer(device, &bufferInfo, nullptr, &buffer));
+
+	VkMemoryRequirements memRequirements;
+	vkGetBufferMemoryRequirements(device, buffer, &memRequirements);
+
+	const VkMemoryAllocateInfo allocInfo = {
+		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+		.pNext = nullptr,
+		.allocationSize = memRequirements.size,
+		.memoryTypeIndex = findMemoryType(physicalDevice, memRequirements.memoryTypeBits, properties)};
+
+	VK_CHECK(vkAllocateMemory(device, &allocInfo, nullptr, &bufferMemory));
+
+	vkBindBufferMemory(device, buffer, bufferMemory, 0);
+
+	return true;
+}
+
+// upload some data into a GPU buffer
+void copyBuffer(VulkanRenderDevice &vkDev, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
+{
+	VkCommandBuffer commandBuffer = beginSingleTimeCommands(vkDev);
+
+	const VkBufferCopy copyRegion = {
+		.srcOffset = 0,
+		.dstOffset = 0,
+		.size = size};
+
+	vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+
+	endSingleTimeCommands(vkDev, commandBuffer);
+}
+
+// creates a temporary command buffer that contains transfer commands
+VkCommandBuffer beginSingleTimeCommands(VulkanRenderDevice &vkDev)
+{
+	VkCommandBuffer commandBuffer;
+
+	const VkCommandBufferAllocateInfo allocInfo = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+		.pNext = nullptr,
+		.commandPool = vkDev.commandPool,
+		.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+		.commandBufferCount = 1};
+
+	vkAllocateCommandBuffers(vkDev.device, &allocInfo, &commandBuffer);
+
+	const VkCommandBufferBeginInfo beginInfo = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+		.pNext = nullptr,
+		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+		.pInheritanceInfo = nullptr};
+
+	vkBeginCommandBuffer(commandBuffer, &beginInfo);
+
+	return commandBuffer;
+}
+
+// submits the command buffer to the graphics queue and waits for the entire operation to complete
+void endSingleTimeCommands(VulkanRenderDevice &vkDev, VkCommandBuffer commandBuffer)
+{
+	vkEndCommandBuffer(commandBuffer);
+
+	const VkSubmitInfo submitInfo = {
+		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+		.pNext = nullptr,
+		.waitSemaphoreCount = 0,
+		.pWaitSemaphores = nullptr,
+		.pWaitDstStageMask = nullptr,
+		.commandBufferCount = 1,
+		.pCommandBuffers = &commandBuffer,
+		.signalSemaphoreCount = 0,
+		.pSignalSemaphores = nullptr};
+
+	vkQueueSubmit(vkDev.graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+	vkQueueWaitIdle(vkDev.graphicsQueue);
+
+	vkFreeCommandBuffers(vkDev.device, vkDev.commandPool, 1, &commandBuffer);
+}
+
+// ============================ shader ====================================
+
 VkShaderStageFlagBits glslangShaderStageToVulkan(glslang_stage_t sh)
 {
 	switch (sh)
@@ -523,7 +646,6 @@ VkShaderStageFlagBits glslangShaderStageToVulkan(glslang_stage_t sh)
 	return VK_SHADER_STAGE_VERTEX_BIT;
 }
 
-// ============================ shader ====================================
 glslang_stage_t glslangShaderStageFromFileName(const char *fileName)
 {
 	if (endsWith(fileName, ".vert"))
