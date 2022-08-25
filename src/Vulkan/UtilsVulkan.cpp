@@ -25,6 +25,8 @@ using glm::vec4;
 #include <cstdio>
 #include <cstdlib>
 
+// ============================ debug capabilities ====================================
+
 void CHECK(bool check, const char *fileName, int lineNumber)
 {
 	if (!check)
@@ -34,6 +36,90 @@ void CHECK(bool check, const char *fileName, int lineNumber)
 		exit(EXIT_FAILURE);
 	}
 }
+
+// tracking all possible errors and warnings that may be produced by the validation layer.
+// prints all messages coming into the system console
+static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebugCallback(
+	VkDebugUtilsMessageSeverityFlagBitsEXT Severity,
+	VkDebugUtilsMessageTypeFlagsEXT Type,
+	const VkDebugUtilsMessengerCallbackDataEXT *CallbackData,
+	void *UserData)
+{
+	printf("Validation layer: %s\n", CallbackData->pMessage);
+	return VK_FALSE;
+}
+
+// more elaborate and provides information about an object that's causing an error or a warning.
+// Some performance warnings are silenced to make the debug output more readable
+static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebugReportCallback(
+	VkDebugReportFlagsEXT flags,
+	VkDebugReportObjectTypeEXT objectType,
+	uint64_t object,
+	size_t location,
+	int32_t messageCode,
+	const char *pLayerPrefix,
+	const char *pMessage,
+	void *UserData)
+{
+	// https://github.com/zeux/niagara/blob/master/src/device.cpp   [ignoring performance warnings]
+	// This silences warnings like "For optimal performance image layout should be VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL instead of GENERAL."
+	if (flags & VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT)
+		return VK_FALSE;
+
+	printf("Debug callback (%s): %s\n", pLayerPrefix, pMessage);
+	return VK_FALSE;
+}
+
+// associate these callbacks with a Vulkan instance, we should create two more
+// objects, messenger and reportCallback; be destroyed at the end of the application
+bool setupDebugCallbacks(VkInstance instance, VkDebugUtilsMessengerEXT *messenger, VkDebugReportCallbackEXT *reportCallback)
+{
+	{
+		const VkDebugUtilsMessengerCreateInfoEXT ci = {
+			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+			.messageSeverity =
+				VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+				VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+			.messageType =
+				VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+				VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+				VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+			.pfnUserCallback = &VulkanDebugCallback,
+			.pUserData = nullptr};
+
+		VK_CHECK(vkCreateDebugUtilsMessengerEXT(instance, &ci, nullptr, messenger));
+	}
+	{
+		const VkDebugReportCallbackCreateInfoEXT ci = {
+			.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT,
+			.pNext = nullptr,
+			.flags =
+				VK_DEBUG_REPORT_WARNING_BIT_EXT |
+				VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT |
+				VK_DEBUG_REPORT_ERROR_BIT_EXT |
+				VK_DEBUG_REPORT_DEBUG_BIT_EXT,
+			.pfnCallback = &VulkanDebugReportCallback,
+			.pUserData = nullptr};
+
+		VK_CHECK(vkCreateDebugReportCallbackEXT(instance, &ci, nullptr, reportCallback));
+	}
+
+	return true;
+}
+
+// add symbolic names to Vulkan objects. This is useful for debugging Vulkan applications 
+// in situations where the validation layer reports object handles
+// bool setVkObjectName(VulkanRenderDevice &vkDev, void *object, VkObjectType objType, const char *name)
+// {
+// 	VkDebugUtilsObjectNameInfoEXT nameInfo = {
+// 		.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+// 		.pNext = nullptr,
+// 		.objectType = objType,
+// 		.objectHandle = (uint64_t)object,
+// 		.pObjectName = name};
+
+// 	return (vkSetDebugUtilsObjectNameEXT(vkDev.device, &nameInfo) == VK_SUCCESS);
+// }
 
 // ============================ instances & devices ====================================
 

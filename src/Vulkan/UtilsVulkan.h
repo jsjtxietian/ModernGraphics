@@ -37,6 +37,7 @@ struct ShaderModule final
 };
 
 void CHECK(bool check, const char *fileName, int lineNumber);
+bool setupDebugCallbacks(VkInstance instance, VkDebugUtilsMessengerEXT* messenger, VkDebugReportCallbackEXT* reportCallback);
 
 size_t compileShaderFile(const char *file, ShaderModule &shaderModule);
 
