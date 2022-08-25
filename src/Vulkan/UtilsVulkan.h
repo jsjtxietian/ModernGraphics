@@ -61,6 +61,21 @@ struct SwapchainSupportDetails final
 	std::vector<VkPresentModeKHR> presentModes;
 };
 
+// Aggregate structure for passing around the texture data
+struct VulkanTexture final
+{
+	uint32_t width;
+	uint32_t height;
+	uint32_t depth;
+	VkFormat format;
+
+	VulkanImage image;
+	VkSampler sampler;
+
+	// Offscreen buffers require VK_IMAGE_LAYOUT_GENERAL && static textures have VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+	VkImageLayout desiredLayout;
+};
+
 struct ShaderModule final
 {
 	std::vector<unsigned int> SPIRV;
@@ -95,3 +110,12 @@ bool createBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDeviceSize
 VkCommandBuffer beginSingleTimeCommands(VulkanRenderDevice &vkDev);
 void endSingleTimeCommands(VulkanRenderDevice &vkDev, VkCommandBuffer commandBuffer);
 void copyBuffer(VulkanRenderDevice &vkDev, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
+
+bool createImage(VkDevice device, VkPhysicalDevice physicalDevice, uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage &image, VkDeviceMemory &imageMemory, VkImageCreateFlags flags = 0, uint32_t mipLevels = 1);
+bool createTextureImageFromData(VulkanRenderDevice &vkDev,
+								VkImage &textureImage, VkDeviceMemory &textureImageMemory,
+								void *imageData, uint32_t texWidth, uint32_t texHeight,
+								VkFormat texFormat,
+								uint32_t layerCount = 1, VkImageCreateFlags flags = 0);
+bool updateTextureImage(VulkanRenderDevice &vkDev, VkImage &textureImage, VkDeviceMemory &textureImageMemory, uint32_t texWidth, uint32_t texHeight, VkFormat texFormat, uint32_t layerCount, const void *imageData, VkImageLayout sourceImageLayout = VK_IMAGE_LAYOUT_UNDEFINED);
+void transitionImageLayout(VulkanRenderDevice &vkDev, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t layerCount = 1, uint32_t mipLevels = 1);
