@@ -1151,6 +1151,50 @@ size_t allocateVertexBuffer(VulkanRenderDevice &vkDev, VkBuffer *storageBuffer,
 	return bufferSize;
 }
 
+// ============================ descriptor sets ====================================
+
+// A descriptor set object is an object that holds a set of descriptors. Think of each descriptor
+// as a handle or a pointer to a resource. We can think of a descriptor set as everything that
+// is "external" to the graphics pipeline or as a resource set. Also, the descriptor set is the
+// only way to specify which textures and buffers can be used by the shader modules in the
+// pipeline. The Vulkan API does not allow you to bind individual resources in shaders; they
+// must be grouped into sets, and only a limited number of descriptor sets can be bound to
+// a given pipeline. This design decision was mostly due to the limitations of some legacy
+// hardware, which must be able to run Vulkan applications.
+
+// Descriptor sets cannot be created directly. They must come from a descriptor pool, which
+// is similar to the command pool we allocated
+
+// a function to create a descriptor pool. The allocated descriptor
+// pool must contain enough items for each texture sample and buffer that's used. We
+// must also multiply these numbers by the number of swap chain images since,
+// we will allocate one descriptor set to each swap chain image
+bool createDescriptorPool(VulkanRenderDevice &vkDev, uint32_t uniformBufferCount, uint32_t storageBufferCount, uint32_t samplerCount, VkDescriptorPool *descriptorPool)
+{
+	const uint32_t imageCount = static_cast<uint32_t>(vkDev.swapchainImages.size());
+
+	std::vector<VkDescriptorPoolSize> poolSizes;
+
+	if (uniformBufferCount)
+		poolSizes.push_back(VkDescriptorPoolSize{.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = imageCount * uniformBufferCount});
+
+	if (storageBufferCount)
+		poolSizes.push_back(VkDescriptorPoolSize{.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = imageCount * storageBufferCount});
+
+	if (samplerCount)
+		poolSizes.push_back(VkDescriptorPoolSize{.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = imageCount * samplerCount});
+
+	const VkDescriptorPoolCreateInfo poolInfo = {
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+		.pNext = nullptr,
+		.flags = 0,
+		.maxSets = static_cast<uint32_t>(imageCount),
+		.poolSizeCount = static_cast<uint32_t>(poolSizes.size()),
+		.pPoolSizes = poolSizes.empty() ? nullptr : poolSizes.data()};
+
+	return (vkCreateDescriptorPool(vkDev.device, &poolInfo, nullptr, descriptorPool) == VK_SUCCESS);
+}
+
 // ============================ shader ====================================
 
 VkShaderStageFlagBits glslangShaderStageToVulkan(glslang_stage_t sh)
