@@ -17,6 +17,11 @@
 #include <glm/glm.hpp>
 #include <glm/ext.hpp>
 
+#include <assimp/scene.h>
+#include <assimp/postprocess.h>
+#include <assimp/cimport.h>
+#include <assimp/version.h>
+
 using glm::mat4;
 using glm::vec2;
 using glm::vec3;
@@ -1065,6 +1070,85 @@ uint32_t bytesPerTexFormat(VkFormat fmt)
 		break;
 	}
 	return 0;
+}
+
+// ============================ mesh geometry data ====================================
+
+// loads a mesh via Assimp from a file into a Vulkan shader storage buffer.
+// The loading part is identical to OpenGL
+bool createTexturedVertexBuffer(VulkanRenderDevice &vkDev, const char *filename,
+								VkBuffer *storageBuffer, VkDeviceMemory *storageBufferMemory,
+								size_t *vertexBufferSize, size_t *indexBufferSize)
+{
+	const aiScene *scene = aiImportFile(filename, aiProcess_Triangulate);
+
+	if (!scene || !scene->HasMeshes())
+	{
+		printf("Unable to load %s\n", filename);
+		exit(255);
+	}
+
+	const aiMesh *mesh = scene->mMeshes[0];
+	struct VertexData
+	{
+		vec3 pos;
+		vec2 tc;
+	};
+
+	std::vector<VertexData> vertices;
+	for (unsigned i = 0; i != mesh->mNumVertices; i++)
+	{
+		const aiVector3D v = mesh->mVertices[i];
+		const aiVector3D t = mesh->mTextureCoords[0][i];
+		vertices.push_back({.pos = vec3(v.x, v.z, v.y), .tc = vec2(t.x, t.y)});
+	}
+
+	std::vector<unsigned int> indices;
+	for (unsigned i = 0; i != mesh->mNumFaces; i++)
+	{
+		for (unsigned j = 0; j != 3; j++)
+			indices.push_back(mesh->mFaces[i].mIndices[j]);
+	}
+	aiReleaseImport(scene);
+
+	// need a staging buffer to upload the data into the GPU memory
+	*vertexBufferSize = sizeof(VertexData) * vertices.size();
+	*indexBufferSize = sizeof(unsigned int) * indices.size();
+
+	allocateVertexBuffer(vkDev, storageBuffer, storageBufferMemory, *vertexBufferSize, vertices.data(), *indexBufferSize, indices.data());
+
+	return true;
+}
+
+size_t allocateVertexBuffer(VulkanRenderDevice &vkDev, VkBuffer *storageBuffer,
+							VkDeviceMemory *storageBufferMemory, size_t vertexDataSize, const void *vertexData,
+							size_t indexDataSize, const void *indexData)
+{
+	VkDeviceSize bufferSize = vertexDataSize + indexDataSize;
+
+	VkBuffer stagingBuffer;
+	VkDeviceMemory stagingBufferMemory;
+	createBuffer(vkDev.device, vkDev.physicalDevice, bufferSize,
+				 VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+				 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+				 stagingBuffer, stagingBufferMemory);
+
+	void *data;
+	vkMapMemory(vkDev.device, stagingBufferMemory, 0, bufferSize, 0, &data);
+	memcpy(data, vertexData, vertexDataSize);
+	memcpy((unsigned char *)data + vertexDataSize, indexData, indexDataSize);
+	vkUnmapMemory(vkDev.device, stagingBufferMemory);
+
+	createBuffer(vkDev.device, vkDev.physicalDevice, bufferSize,
+				 VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+				 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, *storageBuffer, *storageBufferMemory);
+
+	copyBuffer(vkDev, stagingBuffer, *storageBuffer, bufferSize);
+
+	vkDestroyBuffer(vkDev.device, stagingBuffer, nullptr);
+	vkFreeMemory(vkDev.device, stagingBufferMemory, nullptr);
+
+	return bufferSize;
 }
 
 // ============================ shader ====================================
