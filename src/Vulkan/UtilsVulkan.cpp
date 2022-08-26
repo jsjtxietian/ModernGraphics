@@ -1326,3 +1326,20 @@ size_t compileShaderFile(const char *file, ShaderModule &shaderModule)
 
 	return 0;
 }
+
+// compile a shader that's been loaded from a file using
+// glslang and upload the resulting SPIR-V binary to Vulkan
+VkResult createShaderModule(VkDevice device, ShaderModule *shader, const char *fileName)
+{
+	if (compileShaderFile(fileName, *shader) < 1)
+		return VK_NOT_READY;
+
+	const VkShaderModuleCreateInfo createInfo =
+		{
+			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+			.codeSize = shader->SPIRV.size() * sizeof(unsigned int),
+			.pCode = shader->SPIRV.data(),
+		};
+
+	return vkCreateShaderModule(device, &createInfo, nullptr, &shader->shaderModule);
+}

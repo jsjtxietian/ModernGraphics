@@ -86,6 +86,7 @@ void CHECK(bool check, const char *fileName, int lineNumber);
 bool setupDebugCallbacks(VkInstance instance, VkDebugUtilsMessengerEXT *messenger, VkDebugReportCallbackEXT *reportCallback);
 
 size_t compileShaderFile(const char *file, ShaderModule &shaderModule);
+VkResult createShaderModule(VkDevice device, ShaderModule* shader, const char* fileName);
 
 void createInstance(VkInstance *instance);
 VkResult createDevice(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures deviceFeatures, uint32_t graphicsFamily, VkDevice *device);
