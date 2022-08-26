@@ -82,11 +82,30 @@ struct ShaderModule final
 	VkShaderModule shaderModule = nullptr;
 };
 
+struct RenderPassCreateInfo final
+{
+	bool clearColor_ = false;
+	bool clearDepth_ = false;
+	uint8_t flags_ = 0;
+};
+
+enum eRenderPassBit : uint8_t
+{
+	// clear the attachment
+	eRenderPassBit_First = 0x01,
+	// transition to VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+	eRenderPassBit_Last = 0x02,
+	// transition to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+	eRenderPassBit_Offscreen = 0x04,
+	// keep VK_IMAGE_LAYOUT_*_ATTACHMENT_OPTIMAL
+	eRenderPassBit_OffscreenInternal = 0x08,
+};
+
 void CHECK(bool check, const char *fileName, int lineNumber);
 bool setupDebugCallbacks(VkInstance instance, VkDebugUtilsMessengerEXT *messenger, VkDebugReportCallbackEXT *reportCallback);
 
 size_t compileShaderFile(const char *file, ShaderModule &shaderModule);
-VkResult createShaderModule(VkDevice device, ShaderModule* shader, const char* fileName);
+VkResult createShaderModule(VkDevice device, ShaderModule *shader, const char *fileName);
 
 void createInstance(VkInstance *instance);
 VkResult createDevice(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures deviceFeatures, uint32_t graphicsFamily, VkDevice *device);
@@ -125,3 +144,30 @@ size_t allocateVertexBuffer(VulkanRenderDevice &vkDev, VkBuffer *storageBuffer, 
 bool createTexturedVertexBuffer(VulkanRenderDevice &vkDev, const char *filename, VkBuffer *storageBuffer, VkDeviceMemory *storageBufferMemory, size_t *vertexBufferSize, size_t *indexBufferSize);
 
 bool createDescriptorPool(VulkanRenderDevice &vkDev, uint32_t uniformBufferCount, uint32_t storageBufferCount, uint32_t samplerCount, VkDescriptorPool *descriptorPool);
+
+bool createPipelineLayout(VkDevice device, VkDescriptorSetLayout dsLayout, VkPipelineLayout *pipelineLayout);
+bool createColorAndDepthRenderPass(VulkanRenderDevice &device, bool useDepth, VkRenderPass *renderPass, const RenderPassCreateInfo &ci, VkFormat colorFormat = VK_FORMAT_B8G8R8A8_UNORM);
+bool createGraphicsPipeline(
+	VulkanRenderDevice &vkDev,
+	VkRenderPass renderPass, VkPipelineLayout pipelineLayout,
+	const std::vector<const char *> &shaderFiles,
+	VkPipeline *pipeline,
+	VkPrimitiveTopology topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST /* defaults to triangles*/,
+	bool useDepth = true,
+	bool useBlending = true,
+	bool dynamicScissorState = false,
+	int32_t customWidth = -1,
+	int32_t customHeight = -1,
+	uint32_t numPatchControlPoints = 0);
+
+inline VkPipelineShaderStageCreateInfo shaderStageInfo(VkShaderStageFlagBits shaderStage, ShaderModule &module, const char *entryPoint)
+{
+	return VkPipelineShaderStageCreateInfo{
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+		.pNext = nullptr,
+		.flags = 0,
+		.stage = shaderStage,
+		.module = module.shaderModule,
+		.pName = entryPoint,
+		.pSpecializationInfo = nullptr};
+}
