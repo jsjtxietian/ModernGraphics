@@ -143,12 +143,16 @@ set_property(TARGET IrrXML        PROPERTY FOLDER "ThirdPartyLibraries")
 set_property(TARGET zlibstatic    PROPERTY FOLDER "ThirdPartyLibraries")
 set_property(TARGET zlib          PROPERTY FOLDER "ThirdPartyLibraries")
 set_property(TARGET uninstall     PROPERTY FOLDER "ThirdPartyLibraries")
+set_property(TARGET GenericCodeGen     PROPERTY FOLDER "ThirdPartyLibraries")
+set_property(TARGET MachineIndependent     PROPERTY FOLDER "ThirdPartyLibraries")
 
 #complier MSVC
 if(MSVC)
     add_compile_options(-W4)
     add_definitions(-D_CRT_SECURE_NO_WARNINGS)
     add_definitions(-D_CONSOLE)
+    add_definitions(-DVULKAN)
+    # add_definitions(-DOPENGL)
     set_property(TARGET SampleTest PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 endif()
 

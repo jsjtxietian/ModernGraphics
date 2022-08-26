@@ -111,6 +111,7 @@ void createInstance(VkInstance *instance);
 VkResult createDevice(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures deviceFeatures, uint32_t graphicsFamily, VkDevice *device);
 VkResult findSuitablePhysicalDevice(VkInstance instance, std::function<bool(VkPhysicalDevice)> selector, VkPhysicalDevice *physicalDevice);
 uint32_t findQueueFamilies(VkPhysicalDevice device, VkQueueFlags desiredFlags);
+bool isDeviceSuitable(VkPhysicalDevice device);
 
 SwapchainSupportDetails querySwapchainSupport(VkPhysicalDevice device, VkSurfaceKHR surface);
 VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR> &availableFormats);
@@ -118,7 +119,7 @@ VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR> &avai
 uint32_t chooseSwapImageCount(const VkSurfaceCapabilitiesKHR &capabilities);
 VkResult createSwapchain(VkDevice device, VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, uint32_t graphicsFamily, uint32_t width, uint32_t height, VkSwapchainKHR *swapchain, bool supportScreenshots = false);
 size_t createSwapchainImages(VkDevice device, VkSwapchainKHR swapchain, std::vector<VkImage> &swapchainImages, std::vector<VkImageView> &swapchainImageViews);
-bool createImageView(VkDevice device, VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, VkImageView *imageView, VkImageViewType viewType, uint32_t layerCount, uint32_t mipLevels);
+bool createImageView(VkDevice device, VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, VkImageView *imageView, VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D, uint32_t layerCount = 1, uint32_t mipLevels = 1);
 
 VkResult createSemaphore(VkDevice device, VkSemaphore *outSemaphore);
 
@@ -130,8 +131,12 @@ bool createBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDeviceSize
 VkCommandBuffer beginSingleTimeCommands(VulkanRenderDevice &vkDev);
 void endSingleTimeCommands(VulkanRenderDevice &vkDev, VkCommandBuffer commandBuffer);
 void copyBuffer(VulkanRenderDevice &vkDev, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
+/** Copy [data] to GPU device buffer */
+void uploadBufferData(VulkanRenderDevice& vkDev, const VkDeviceMemory& bufferMemory, VkDeviceSize deviceOffset, const void* data, const size_t dataSize);
 
 bool createImage(VkDevice device, VkPhysicalDevice physicalDevice, uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage &image, VkDeviceMemory &imageMemory, VkImageCreateFlags flags = 0, uint32_t mipLevels = 1);
+bool createTextureImage(VulkanRenderDevice &vkDev, const char *filename, VkImage &textureImage, VkDeviceMemory &textureImageMemory, uint32_t *outTexWidth = nullptr, uint32_t *outTexHeight = nullptr);
+bool createTextureSampler(VkDevice device, VkSampler *sampler, VkFilter minFilter = VK_FILTER_LINEAR, VkFilter maxFilter = VK_FILTER_LINEAR, VkSamplerAddressMode addressMode = VK_SAMPLER_ADDRESS_MODE_REPEAT);
 bool createTextureImageFromData(VulkanRenderDevice &vkDev,
 								VkImage &textureImage, VkDeviceMemory &textureImageMemory,
 								void *imageData, uint32_t texWidth, uint32_t texHeight,
@@ -139,6 +144,10 @@ bool createTextureImageFromData(VulkanRenderDevice &vkDev,
 								uint32_t layerCount = 1, VkImageCreateFlags flags = 0);
 bool updateTextureImage(VulkanRenderDevice &vkDev, VkImage &textureImage, VkDeviceMemory &textureImageMemory, uint32_t texWidth, uint32_t texHeight, VkFormat texFormat, uint32_t layerCount, const void *imageData, VkImageLayout sourceImageLayout = VK_IMAGE_LAYOUT_UNDEFINED);
 void transitionImageLayout(VulkanRenderDevice &vkDev, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t layerCount = 1, uint32_t mipLevels = 1);
+bool createDepthResources(VulkanRenderDevice &vkDev, uint32_t width,
+						  uint32_t height, VulkanImage &depth);
+bool createColorAndDepthFramebuffers(VulkanRenderDevice &vkDev, VkRenderPass renderPass, VkImageView depthImageView, std::vector<VkFramebuffer> &swapchainFramebuffers);
+void transitionImageLayoutCmd(VkCommandBuffer commandBuffer, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t layerCount = 1, uint32_t mipLevels = 1);
 
 size_t allocateVertexBuffer(VulkanRenderDevice &vkDev, VkBuffer *storageBuffer, VkDeviceMemory *storageBufferMemory, size_t vertexDataSize, const void *vertexData, size_t indexDataSize, const void *indexData);
 bool createTexturedVertexBuffer(VulkanRenderDevice &vkDev, const char *filename, VkBuffer *storageBuffer, VkDeviceMemory *storageBufferMemory, size_t *vertexBufferSize, size_t *indexBufferSize);
@@ -160,6 +169,10 @@ bool createGraphicsPipeline(
 	int32_t customHeight = -1,
 	uint32_t numPatchControlPoints = 0);
 
+uint32_t bytesPerTexFormat(VkFormat fmt);
+bool hasStencilComponent(VkFormat format);
+void destroyVulkanImage(VkDevice device, VulkanImage& image);
+
 inline VkPipelineShaderStageCreateInfo shaderStageInfo(VkShaderStageFlagBits shaderStage, ShaderModule &module, const char *entryPoint)
 {
 	return VkPipelineShaderStageCreateInfo{
@@ -170,4 +183,14 @@ inline VkPipelineShaderStageCreateInfo shaderStageInfo(VkShaderStageFlagBits sha
 		.module = module.shaderModule,
 		.pName = entryPoint,
 		.pSpecializationInfo = nullptr};
+}
+
+inline VkDescriptorSetLayoutBinding descriptorSetLayoutBinding(uint32_t binding, VkDescriptorType descriptorType, VkShaderStageFlags stageFlags, uint32_t descriptorCount = 1)
+{
+	return VkDescriptorSetLayoutBinding{
+		.binding = binding,
+		.descriptorType = descriptorType,
+		.descriptorCount = descriptorCount,
+		.stageFlags = stageFlags,
+		.pImmutableSamplers = nullptr};
 }

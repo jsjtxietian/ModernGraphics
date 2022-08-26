@@ -1,3 +1,5 @@
+#if OPENGL
+
 #include "GLshader.h"
 #include "Utils/Utils.h"
 #include <assert.h>
@@ -130,3 +132,5 @@ GLenum GLShaderTypeFromFileName(const char *fileName)
 
     return 0;
 }
+
+#endif

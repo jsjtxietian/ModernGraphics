@@ -1,3 +1,5 @@
+#if OPENGL
+
 #pragma once
 #include "glad/gl.h"
 
@@ -32,3 +34,5 @@ private:
 };
 
 GLenum GLShaderTypeFromFileName(const char *fileName);
+
+#endif

@@ -271,6 +271,21 @@ uint32_t findQueueFamilies(VkPhysicalDevice device, VkQueueFlags desiredFlags)
 	return 0;
 }
 
+bool isDeviceSuitable(VkPhysicalDevice device)
+{
+	VkPhysicalDeviceProperties deviceProperties;
+	vkGetPhysicalDeviceProperties(device, &deviceProperties);
+
+	VkPhysicalDeviceFeatures deviceFeatures;
+	vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+
+	const bool isDiscreteGPU = deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
+	const bool isIntegratedGPU = deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU;
+	const bool isGPU = isDiscreteGPU || isIntegratedGPU;
+
+	return isGPU && deviceFeatures.geometryShader;
+}
+
 // ============================ swapchain ====================================
 // Normally, each frame is rendered as an offscreen image. Once the rendering process is
 // complete, the offscreen image should be made visible. An object that holds a collection of
@@ -352,7 +367,7 @@ uint32_t chooseSwapImageCount(const VkSurfaceCapabilitiesKHR &capabilities)
 VkResult createSwapchain(VkDevice device, VkPhysicalDevice physicalDevice,
 						 VkSurfaceKHR surface, uint32_t graphicsFamily,
 						 uint32_t width, uint32_t height,
-						 VkSwapchainKHR *swapchain, bool supportScreenshots = false)
+						 VkSwapchainKHR *swapchain, bool supportScreenshots)
 {
 	auto swapchainSupport = querySwapchainSupport(physicalDevice, surface);
 	auto surfaceFormat = chooseSwapSurfaceFormat(swapchainSupport.formats);
@@ -408,8 +423,8 @@ size_t createSwapchainImages(
 // creates an image view for us
 bool createImageView(VkDevice device, VkImage image, VkFormat format,
 					 VkImageAspectFlags aspectFlags, VkImageView *imageView,
-					 VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D,
-					 uint32_t layerCount = 1, uint32_t mipLevels = 1)
+					 VkImageViewType viewType,
+					 uint32_t layerCount, uint32_t mipLevels )
 {
 	const VkImageViewCreateInfo viewInfo =
 		{
@@ -1045,6 +1060,33 @@ void uploadBufferData(VulkanRenderDevice &vkDev, const VkDeviceMemory &bufferMem
 	vkMapMemory(vkDev.device, bufferMemory, deviceOffset, dataSize, 0, &mappedData);
 	memcpy(mappedData, data, dataSize);
 	vkUnmapMemory(vkDev.device, bufferMemory);
+}
+
+bool createColorAndDepthFramebuffers(VulkanRenderDevice &vkDev, VkRenderPass renderPass, VkImageView depthImageView, std::vector<VkFramebuffer> &swapchainFramebuffers)
+{
+	swapchainFramebuffers.resize(vkDev.swapchainImageViews.size());
+
+	for (size_t i = 0; i < vkDev.swapchainImages.size(); i++)
+	{
+		std::array<VkImageView, 2> attachments = {
+			vkDev.swapchainImageViews[i],
+			depthImageView};
+
+		const VkFramebufferCreateInfo framebufferInfo = {
+			.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+			.pNext = nullptr,
+			.flags = 0,
+			.renderPass = renderPass,
+			.attachmentCount = static_cast<uint32_t>((depthImageView == VK_NULL_HANDLE) ? 1 : 2),
+			.pAttachments = attachments.data(),
+			.width = vkDev.framebufferWidth,
+			.height = vkDev.framebufferHeight,
+			.layers = 1};
+
+		VK_CHECK(vkCreateFramebuffer(vkDev.device, &framebufferInfo, nullptr, &swapchainFramebuffers[i]));
+	}
+
+	return true;
 }
 
 uint32_t bytesPerTexFormat(VkFormat fmt)
