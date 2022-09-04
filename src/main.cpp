@@ -170,6 +170,7 @@ private:
 
     VkRenderPass renderPass;
     VkPipelineLayout pipelineLayout;
+    VkPipeline graphicsPipeline;
 
     void initWindow()
     {
@@ -204,6 +205,7 @@ private:
 
     void cleanup()
     {
+        vkDestroyPipeline(device, graphicsPipeline, nullptr);
         vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
         vkDestroyRenderPass(device, renderPass, nullptr);
         for (auto imageView : swapChainImageViews)
@@ -651,7 +653,7 @@ private:
         // The loadOp and storeOp determine what to do with the data in the attachment before rendering and after rendering
         colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
         colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        // The loadOp and storeOp apply to color and depth data, 
+        // The loadOp and storeOp apply to color and depth data,
         // and stencilLoadOp / stencilStoreOp apply to stencil data.
         colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -668,7 +670,7 @@ private:
         // Vulkan will automatically transition the attachment to this layout when the subpass is started.
         colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-        // The index of the attachment in this array is directly referenced from the fragment shader 
+        // The index of the attachment in this array is directly referenced from the fragment shader
         // with the layout(location = 0) out vec4 outColor directive
         VkSubpassDescription subpass{};
         subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
@@ -690,8 +692,8 @@ private:
     }
     void createGraphicsPipeline()
     {
-        auto vertShaderCode = readFile("shaders/vert.spv");
-        auto fragShaderCode = readFile("shaders/frag.spv");
+        auto vertShaderCode = readFile("data/shaders/vert.spv");
+        auto fragShaderCode = readFile("data/shaders/frag.spv");
 
         VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
         VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
@@ -798,6 +800,32 @@ private:
         if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS)
         {
             throw std::runtime_error("failed to create pipeline layout!");
+        }
+
+        VkGraphicsPipelineCreateInfo pipelineInfo{};
+        pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pipelineInfo.stageCount = 2;
+        pipelineInfo.pStages = shaderStages;
+        pipelineInfo.pVertexInputState = &vertexInputInfo;
+        pipelineInfo.pInputAssemblyState = &inputAssembly;
+        pipelineInfo.pViewportState = &viewportState;
+        pipelineInfo.pRasterizationState = &rasterizer;
+        pipelineInfo.pMultisampleState = &multisampling;
+        pipelineInfo.pColorBlendState = &colorBlending;
+        pipelineInfo.pDynamicState = &dynamicState;
+        pipelineInfo.layout = pipelineLayout;
+        pipelineInfo.renderPass = renderPass;
+        pipelineInfo.subpass = 0;
+        //  Vulkan allows you to create a new graphics pipeline by deriving from an existing pipeline. 
+        pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+
+        //  It is designed to take multiple VkGraphicsPipelineCreateInfo objects 
+        // and create multiple VkPipeline objects in a single call.
+        // A pipeline cache can be used to store and reuse data relevant to pipeline creation across multiple calls to vkCreateGraphicsPipelines 
+        // and even across program executions if the cache is stored to a file.
+        if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline) != VK_SUCCESS)
+        {
+            throw std::runtime_error("failed to create graphics pipeline!");
         }
 
         // The compilation and linking of the SPIR-V bytecode to machine code for execution
