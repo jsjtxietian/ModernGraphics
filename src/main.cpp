@@ -168,6 +168,8 @@ private:
     VkExtent2D swapChainExtent;
     std::vector<VkImageView> swapChainImageViews;
 
+    VkPipelineLayout pipelineLayout;
+
     void initWindow()
     {
         glfwInit();
@@ -200,6 +202,7 @@ private:
 
     void cleanup()
     {
+        vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
         for (auto imageView : swapChainImageViews)
         {
             vkDestroyImageView(device, imageView, nullptr);
@@ -645,8 +648,8 @@ private:
         vertShaderStageInfo.module = vertShaderModule;
         // entrypoint
         vertShaderStageInfo.pName = "main";
-        // pSpecializationInfo allows you to specify values for shader constants. 
-        // You can use a single shader module where its behavior can be configured at 
+        // pSpecializationInfo allows you to specify values for shader constants.
+        // You can use a single shader module where its behavior can be configured at
         // pipeline creation by specifying different values for the constants used in it.
 
         VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
@@ -657,8 +660,94 @@ private:
 
         VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
 
-        // The compilation and linking of the SPIR-V bytecode to machine code for execution 
-        // by the GPU doesn't happen until the graphics pipeline is created. 
+        // describes the format of the vertex data that will be passed to the vertex shader.
+        // Bindings: spacing between data and whether the data is per-vertex or per-instance
+        // Attribute descriptions: type of the attributes passed to the vertex shader, which binding to load them from and at which offset
+        VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+        vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        vertexInputInfo.vertexBindingDescriptionCount = 0;
+        vertexInputInfo.vertexAttributeDescriptionCount = 0;
+
+        // what kind of geometry will be drawn from the vertices and if primitive restart should be enabled. 
+        VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+        inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        // set the primitiveRestartEnable member to VK_TRUE, then it's possible to break up lines and triangles 
+        // in the _STRIP topology modes by using a special index of 0xFFFF or 0xFFFFFFFF
+        inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+        // A viewport basically describes the region of the framebuffer that the output will be rendered to
+        // While viewports define the transformation from the image to the framebuffer, 
+        // scissor rectangles define in which regions pixels will actually be stored.
+        VkPipelineViewportStateCreateInfo viewportState{};
+        viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        viewportState.viewportCount = 1;
+        viewportState.scissorCount = 1;
+
+        // The rasterizer takes the geometry that is shaped by the vertices from the vertex shader 
+        // and turns it into fragments to be colored by the fragment shader. It also performs depth testing, face culling and the scissor test, 
+        // and it can be configured to output fragments that fill entire polygons or just the edges (wireframe rendering). 
+        VkPipelineRasterizationStateCreateInfo rasterizer{};
+        rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        // If depthClampEnable is set to VK_TRUE, then fragments that are beyond the near and far planes 
+        // are clamped to them as opposed to discarding them. 
+        rasterizer.depthClampEnable = VK_FALSE;
+        // If rasterizerDiscardEnable is set to VK_TRUE, then geometry never passes through the rasterizer stage.
+        rasterizer.rasterizerDiscardEnable = VK_FALSE;
+        // The polygonMode determines how fragments are generated for geometry.
+        rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+        // it describes the thickness of lines in terms of number of fragments.
+        rasterizer.lineWidth = 1.0f;
+        rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+        // The frontFace variable specifies the vertex order for faces to be considered front-facing and can be clockwise or counterclockwise.
+        rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+        // The rasterizer can alter the depth values by adding a constant value or biasing them based on a fragment's slope.
+        rasterizer.depthBiasEnable = VK_FALSE;
+
+        VkPipelineMultisampleStateCreateInfo multisampling{};
+        multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        multisampling.sampleShadingEnable = VK_FALSE;
+        multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+        // contains the configuration per attached framebuffer
+        VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+        // The resulting color is AND'd with the colorWriteMask to determine which channels are actually passed through.
+        colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        colorBlendAttachment.blendEnable = VK_FALSE;
+
+        // contains the global color blending settings
+        VkPipelineColorBlendStateCreateInfo colorBlending{};
+        colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        colorBlending.logicOpEnable = VK_FALSE;
+        colorBlending.logicOp = VK_LOGIC_OP_COPY;
+        colorBlending.attachmentCount = 1;
+        colorBlending.pAttachments = &colorBlendAttachment;
+        colorBlending.blendConstants[0] = 0.0f;
+        colorBlending.blendConstants[1] = 0.0f;
+        colorBlending.blendConstants[2] = 0.0f;
+        colorBlending.blendConstants[3] = 0.0f;
+
+        // a limited amount of the state can actually be changed without recreating the pipeline at draw time.
+        std::vector<VkDynamicState> dynamicStates = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR};
+        VkPipelineDynamicStateCreateInfo dynamicState{};
+        dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+        dynamicState.pDynamicStates = dynamicStates.data();
+
+        VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+        pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        pipelineLayoutInfo.setLayoutCount = 0;
+        pipelineLayoutInfo.pushConstantRangeCount = 0;
+
+        if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS)
+        {
+            throw std::runtime_error("failed to create pipeline layout!");
+        }
+
+        // The compilation and linking of the SPIR-V bytecode to machine code for execution
+        // by the GPU doesn't happen until the graphics pipeline is created.
         // That means that we're allowed to destroy the shader modules again as soon as pipeline creation is finished
         vkDestroyShaderModule(device, fragShaderModule, nullptr);
         vkDestroyShaderModule(device, vertShaderModule, nullptr);
@@ -670,7 +759,7 @@ private:
         VkShaderModuleCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
         createInfo.codeSize = code.size();
-        // the data is stored in an std::vector where the default allocator 
+        // the data is stored in an std::vector where the default allocator
         // already ensures that the data satisfies the worst case alignment requirements
         createInfo.pCode = reinterpret_cast<const uint32_t *>(code.data());
 
