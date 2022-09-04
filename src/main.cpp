@@ -168,6 +168,7 @@ private:
     VkExtent2D swapChainExtent;
     std::vector<VkImageView> swapChainImageViews;
 
+    VkRenderPass renderPass;
     VkPipelineLayout pipelineLayout;
 
     void initWindow()
@@ -189,6 +190,7 @@ private:
         createLogicalDevice();
         createSwapChain();
         createImageViews();
+        createRenderPass();
         createGraphicsPipeline();
     }
 
@@ -203,6 +205,7 @@ private:
     void cleanup()
     {
         vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+        vkDestroyRenderPass(device, renderPass, nullptr);
         for (auto imageView : swapChainImageViews)
         {
             vkDestroyImageView(device, imageView, nullptr);
@@ -634,6 +637,57 @@ private:
         }
     }
 
+    // tell Vulkan about the framebuffer attachments that will be used while rendering
+    // specify how many color and depth buffers there will be
+    // how many samples to use for each of them and
+    // how their contents should be handled throughout the rendering operations.
+    void createRenderPass()
+    {
+        VkAttachmentDescription colorAttachment{};
+        // The format of the color attachment should match the format of the swap chain images
+        colorAttachment.format = swapChainImageFormat;
+        // not doing anything with multisampling yet
+        colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+        // The loadOp and storeOp determine what to do with the data in the attachment before rendering and after rendering
+        colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        // The loadOp and storeOp apply to color and depth data, 
+        // and stencilLoadOp / stencilStoreOp apply to stencil data.
+        colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        // images need to be transitioned to specific layouts that are suitable for the operation that they're going to be involved in next
+        // specifies which layout the image will have before the render pass begins
+        colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        // specifies the layout to automatically transition to when the render pass finishes
+        colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+        VkAttachmentReference colorAttachmentRef{};
+        // specifies which attachment to reference by its index in the attachment descriptions array.
+        colorAttachmentRef.attachment = 0;
+        // which layout we would like the attachment to have during a subpass that uses this reference.
+        // Vulkan will automatically transition the attachment to this layout when the subpass is started.
+        colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+        // The index of the attachment in this array is directly referenced from the fragment shader 
+        // with the layout(location = 0) out vec4 outColor directive
+        VkSubpassDescription subpass{};
+        subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        subpass.colorAttachmentCount = 1;
+        subpass.pColorAttachments = &colorAttachmentRef;
+
+        // The VkAttachmentReference objects reference attachments using the indices of this array
+        VkRenderPassCreateInfo renderPassInfo{};
+        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+        renderPassInfo.attachmentCount = 1;
+        renderPassInfo.pAttachments = &colorAttachment;
+        renderPassInfo.subpassCount = 1;
+        renderPassInfo.pSubpasses = &subpass;
+
+        if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS)
+        {
+            throw std::runtime_error("failed to create render pass!");
+        }
+    }
     void createGraphicsPipeline()
     {
         auto vertShaderCode = readFile("shaders/vert.spv");
@@ -668,29 +722,29 @@ private:
         vertexInputInfo.vertexBindingDescriptionCount = 0;
         vertexInputInfo.vertexAttributeDescriptionCount = 0;
 
-        // what kind of geometry will be drawn from the vertices and if primitive restart should be enabled. 
+        // what kind of geometry will be drawn from the vertices and if primitive restart should be enabled.
         VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
         inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
         inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-        // set the primitiveRestartEnable member to VK_TRUE, then it's possible to break up lines and triangles 
+        // set the primitiveRestartEnable member to VK_TRUE, then it's possible to break up lines and triangles
         // in the _STRIP topology modes by using a special index of 0xFFFF or 0xFFFFFFFF
         inputAssembly.primitiveRestartEnable = VK_FALSE;
 
         // A viewport basically describes the region of the framebuffer that the output will be rendered to
-        // While viewports define the transformation from the image to the framebuffer, 
+        // While viewports define the transformation from the image to the framebuffer,
         // scissor rectangles define in which regions pixels will actually be stored.
         VkPipelineViewportStateCreateInfo viewportState{};
         viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
         viewportState.viewportCount = 1;
         viewportState.scissorCount = 1;
 
-        // The rasterizer takes the geometry that is shaped by the vertices from the vertex shader 
-        // and turns it into fragments to be colored by the fragment shader. It also performs depth testing, face culling and the scissor test, 
-        // and it can be configured to output fragments that fill entire polygons or just the edges (wireframe rendering). 
+        // The rasterizer takes the geometry that is shaped by the vertices from the vertex shader
+        // and turns it into fragments to be colored by the fragment shader. It also performs depth testing, face culling and the scissor test,
+        // and it can be configured to output fragments that fill entire polygons or just the edges (wireframe rendering).
         VkPipelineRasterizationStateCreateInfo rasterizer{};
         rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-        // If depthClampEnable is set to VK_TRUE, then fragments that are beyond the near and far planes 
-        // are clamped to them as opposed to discarding them. 
+        // If depthClampEnable is set to VK_TRUE, then fragments that are beyond the near and far planes
+        // are clamped to them as opposed to discarding them.
         rasterizer.depthClampEnable = VK_FALSE;
         // If rasterizerDiscardEnable is set to VK_TRUE, then geometry never passes through the rasterizer stage.
         rasterizer.rasterizerDiscardEnable = VK_FALSE;
