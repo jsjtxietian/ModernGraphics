@@ -140,11 +140,12 @@ private:
     VkQueue presentQueue;
 
     VkSwapchainKHR swapChain;
-    // The images were created by the implementation for the swap chain 
+    // The images were created by the implementation for the swap chain
     // and they will be automatically cleaned up once the swap chain has been destroyed
     std::vector<VkImage> swapChainImages;
     VkFormat swapChainImageFormat;
     VkExtent2D swapChainExtent;
+    std::vector<VkImageView> swapChainImageViews;
 
     void initWindow()
     {
@@ -164,6 +165,7 @@ private:
         pickPhysicalDevice();
         createLogicalDevice();
         createSwapChain();
+        createImageViews();
     }
 
     void mainLoop()
@@ -176,6 +178,10 @@ private:
 
     void cleanup()
     {
+        for (auto imageView : swapChainImageViews)
+        {
+            vkDestroyImageView(device, imageView, nullptr);
+        }
         vkDestroySwapchainKHR(device, swapChain, nullptr);
         vkDestroyDevice(device, nullptr);
         if (enableValidationLayers)
@@ -488,7 +494,7 @@ private:
         uint32_t queueFamilyIndices[] = {indices.graphicsFamily.value(), indices.presentFamily.value()};
 
         // drawing on the images in the swap chain from the graphics queue and
-        // then submitting them on the presentation queue. 
+        // then submitting them on the presentation queue.
         if (indices.graphicsFamily != indices.presentFamily)
         {
             // Images can be used across multiple queue families without explicit ownership transfers.
@@ -557,7 +563,7 @@ private:
         }
         else
         {
-            // GLFW uses two units when measuring sizes: pixels and screen coordinates. 
+            // GLFW uses two units when measuring sizes: pixels and screen coordinates.
             // Vulkan works with pixels
             int width, height;
             glfwGetFramebufferSize(window, &width, &height);
@@ -570,6 +576,36 @@ private:
             actualExtent.height = std::clamp(actualExtent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
 
             return actualExtent;
+        }
+    }
+
+    void createImageViews()
+    {
+        swapChainImageViews.resize(swapChainImages.size());
+
+        for (size_t i = 0; i < swapChainImages.size(); i++)
+        {
+            VkImageViewCreateInfo createInfo{};
+            createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+            createInfo.image = swapChainImages[i];
+            createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+            createInfo.format = swapChainImageFormat;
+            // The components field allows you to swizzle the color channels around.
+            createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+            createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+            createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+            createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+            // The subresourceRange field describes what the image's purpose is and which part of the image should be accessed.
+            createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            createInfo.subresourceRange.baseMipLevel = 0;
+            createInfo.subresourceRange.levelCount = 1;
+            createInfo.subresourceRange.baseArrayLayer = 0;
+            createInfo.subresourceRange.layerCount = 1;
+
+            if (vkCreateImageView(device, &createInfo, nullptr, &swapChainImageViews[i]) != VK_SUCCESS)
+            {
+                throw std::runtime_error("failed to create image views!");
+            }
         }
     }
 };
