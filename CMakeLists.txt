@@ -121,6 +121,9 @@ include_directories(3rdparty/vulkan/include)
 add_subdirectory(3rdparty/volk)
 set_property(TARGET volk          PROPERTY FOLDER "ThirdPartyLibraries")
 
+#tiny obj loader
+include_directories(3rdparty/tinyobjloader)
+
 #glslang
 set(ENABLE_GLSLANG_BINARIES  OFF  CACHE BOOL "")
 set(ENABLE_HLSL              OFF  CACHE BOOL "")
