@@ -1,3 +1,5 @@
+#if 0
+
 #define VK_NO_PROTOTYPES
 #include <volk/volk.h>
 
@@ -2204,3 +2206,5 @@ int main()
 
     return EXIT_SUCCESS;
 }
+
+#endif
