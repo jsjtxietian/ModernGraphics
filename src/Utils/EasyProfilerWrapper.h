@@ -37,7 +37,8 @@
 #define PROFILER_DUMP(fileName) \
 	OPTICK_STOP_CAPTURE();      \
 	OPTICK_SAVE_CAPTURE(fileName);
-
+	
+// the way they deal with block colors, Both use constants with different names. 
 namespace profiler
 {
 	namespace colors

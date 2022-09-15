@@ -186,10 +186,14 @@ public:
     {
     }
 
+    // The current camera position is changed to move toward the desired camera position.
     void update(float deltaSeconds, const glm::vec2 &mousePos, bool mousePressed)
     {
+        // The movement speed is proportional to the distance between these two positions and is scaled
+        // using the linear damping coefficient
         positionCurrent_ += dampingLinear_ * deltaSeconds * (positionDesired_ - positionCurrent_);
 
+        // ensure they remain inside the 0…360 degree range and clip them accordingly
         // normalization is required to avoid "spinning" around the object 2pi times
         anglesCurrent_ = clipAngles(anglesCurrent_);
         anglesDesired_ = clipAngles(anglesDesired_);
@@ -216,10 +220,13 @@ public:
     virtual glm::mat4 getViewMatrix() const override { return currentTransform_; }
 
 public:
+    // user-configurable parameters for linear and angular damping coefficients
     float dampingLinear_ = 10.0f;
     glm::vec3 dampingEulerAngles_ = glm::vec3(5.0f, 5.0f, 5.0f);
 
 private:
+    // store the current and desired positions of the camera as well as two sets of
+    // pitch, pan, and roll Euler angles in vec3 member fields.
     glm::vec3 positionCurrent_ = glm::vec3(0.0f);
     glm::vec3 positionDesired_ = glm::vec3(0.0f);
 

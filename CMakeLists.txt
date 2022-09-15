@@ -164,6 +164,11 @@ endif()
 target_link_libraries(SampleTest glad glfw volk glslang SPIRV assimp)
 
 
-
+if(BUILD_WITH_EASY_PROFILER)
+	target_link_libraries(SampleTest easy_profiler)
+endif()
+if(BUILD_WITH_OPTICK)
+	target_link_libraries(SampleTest OptickCore)
+endif()
 
 
