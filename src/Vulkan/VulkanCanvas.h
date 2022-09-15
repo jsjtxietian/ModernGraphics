@@ -1,6 +1,6 @@
 #pragma once
 
-#include "sRendererBase.h"
+#include "RendererBase.h"
 
 #include <glm/glm.hpp>
 #include <glm/ext.hpp>

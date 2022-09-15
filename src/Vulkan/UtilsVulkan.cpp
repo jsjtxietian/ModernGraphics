@@ -424,7 +424,7 @@ size_t createSwapchainImages(
 bool createImageView(VkDevice device, VkImage image, VkFormat format,
 					 VkImageAspectFlags aspectFlags, VkImageView *imageView,
 					 VkImageViewType viewType,
-					 uint32_t layerCount, uint32_t mipLevels )
+					 uint32_t layerCount, uint32_t mipLevels)
 {
 	const VkImageViewCreateInfo viewInfo =
 		{
@@ -1054,6 +1054,15 @@ bool updateTextureImage(VulkanRenderDevice &vkDev, VkImage &textureImage, VkDevi
 	return true;
 }
 
+bool createUniformBuffer(VulkanRenderDevice &vkDev, VkBuffer &buffer,
+						 VkDeviceMemory &bufferMemory, VkDeviceSize bufferSize)
+{
+	return createBuffer(vkDev.device, vkDev.physicalDevice, bufferSize,
+						VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+						VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+						buffer, bufferMemory);
+}
+
 void uploadBufferData(VulkanRenderDevice &vkDev, const VkDeviceMemory &bufferMemory, VkDeviceSize deviceOffset, const void *data, const size_t dataSize)
 {
 	void *mappedData = nullptr;
@@ -1401,6 +1410,38 @@ bool createPipelineLayout(VkDevice device, VkDescriptorSetLayout dsLayout, VkPip
 		.pSetLayouts = &dsLayout,
 		.pushConstantRangeCount = 0,
 		.pPushConstantRanges = nullptr};
+
+	return (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, pipelineLayout) == VK_SUCCESS);
+}
+
+bool createPipelineLayoutWithConstants(VkDevice device, VkDescriptorSetLayout dsLayout,
+									   VkPipelineLayout *pipelineLayout, uint32_t vtxConstSize,
+									   uint32_t fragConstSize)
+{
+	const VkPushConstantRange ranges[] =
+		{
+			{
+				VK_SHADER_STAGE_VERTEX_BIT, // stageFlags
+				0,							// offset
+				vtxConstSize				// size
+			},
+
+			{
+				VK_SHADER_STAGE_FRAGMENT_BIT, // stageFlags
+				vtxConstSize,				  // offset
+				fragConstSize				  // size
+			}};
+
+	uint32_t constSize = (vtxConstSize > 0) + (fragConstSize > 0);
+
+	const VkPipelineLayoutCreateInfo pipelineLayoutInfo = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+		.pNext = nullptr,
+		.flags = 0,
+		.setLayoutCount = 1,
+		.pSetLayouts = &dsLayout,
+		.pushConstantRangeCount = constSize,
+		.pPushConstantRanges = (constSize == 0) ? nullptr : (vtxConstSize > 0 ? ranges : &ranges[1])};
 
 	return (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, pipelineLayout) == VK_SUCCESS);
 }

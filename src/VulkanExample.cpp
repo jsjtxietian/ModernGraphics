@@ -1,3 +1,4 @@
+#if 0
 #define VK_NO_PROTOTYPES
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -445,3 +446,4 @@ int main()
 
     return 0;
 }
+#endif

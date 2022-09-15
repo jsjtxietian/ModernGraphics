@@ -375,7 +375,9 @@ ImGuiRenderer::ImGuiRenderer(VulkanRenderDevice &vkDev, const std::vector<Vulkan
         !createMultiDescriptorSet(vkDev) ||
         !createPipelineLayoutWithConstants(vkDev.device, descriptorSetLayout_, &pipelineLayout_, 0, sizeof(uint32_t)) ||
         !createGraphicsPipeline(vkDev, renderPass_, pipelineLayout_,
-                                {"data/shaders/chapter04/imgui.vert", "data/shaders/chapter06/imgui_multi.frag"}, &graphicsPipeline_, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+                                {"data/shaders/imgui.vert",
+                                 "data/shaders/imgui_multi.frag"},
+                                &graphicsPipeline_, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
                                 true, true, true))
     {
         printf("ImGuiRenderer: pipeline creation failed\n");

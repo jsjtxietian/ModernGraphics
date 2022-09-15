@@ -155,13 +155,13 @@ if(MSVC)
     add_definitions(-D_CRT_SECURE_NO_WARNINGS)
     add_definitions(-D_CONSOLE)
     # add_definitions(-DVULKAN)
-    # add_definitions(-DOPENGL)
+    add_definitions(-DOPENGL)
     set_property(TARGET SampleTest PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 endif()
 
 
 
-target_link_libraries(SampleTest glfw volk glslang SPIRV assimp)
+target_link_libraries(SampleTest glad glfw volk glslang SPIRV assimp)
 
 
 

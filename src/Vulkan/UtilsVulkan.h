@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <functional>
+#include <array>
 
 #define VK_NO_PROTOTYPES
 #include <volk/volk.h>
@@ -131,8 +132,10 @@ bool createBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDeviceSize
 VkCommandBuffer beginSingleTimeCommands(VulkanRenderDevice &vkDev);
 void endSingleTimeCommands(VulkanRenderDevice &vkDev, VkCommandBuffer commandBuffer);
 void copyBuffer(VulkanRenderDevice &vkDev, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
+bool createUniformBuffer(VulkanRenderDevice &vkDev, VkBuffer &buffer,
+						 VkDeviceMemory &bufferMemory, VkDeviceSize bufferSize);
 /** Copy [data] to GPU device buffer */
-void uploadBufferData(VulkanRenderDevice& vkDev, const VkDeviceMemory& bufferMemory, VkDeviceSize deviceOffset, const void* data, const size_t dataSize);
+void uploadBufferData(VulkanRenderDevice &vkDev, const VkDeviceMemory &bufferMemory, VkDeviceSize deviceOffset, const void *data, const size_t dataSize);
 
 bool createImage(VkDevice device, VkPhysicalDevice physicalDevice, uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage &image, VkDeviceMemory &imageMemory, VkImageCreateFlags flags = 0, uint32_t mipLevels = 1);
 bool createTextureImage(VulkanRenderDevice &vkDev, const char *filename, VkImage &textureImage, VkDeviceMemory &textureImageMemory, uint32_t *outTexWidth = nullptr, uint32_t *outTexHeight = nullptr);
@@ -155,6 +158,9 @@ bool createTexturedVertexBuffer(VulkanRenderDevice &vkDev, const char *filename,
 bool createDescriptorPool(VulkanRenderDevice &vkDev, uint32_t uniformBufferCount, uint32_t storageBufferCount, uint32_t samplerCount, VkDescriptorPool *descriptorPool);
 
 bool createPipelineLayout(VkDevice device, VkDescriptorSetLayout dsLayout, VkPipelineLayout *pipelineLayout);
+bool createPipelineLayoutWithConstants(VkDevice device, VkDescriptorSetLayout dsLayout,
+									   VkPipelineLayout *pipelineLayout, uint32_t vtxConstSize,
+									   uint32_t fragConstSize);
 bool createColorAndDepthRenderPass(VulkanRenderDevice &device, bool useDepth, VkRenderPass *renderPass, const RenderPassCreateInfo &ci, VkFormat colorFormat = VK_FORMAT_B8G8R8A8_UNORM);
 bool createGraphicsPipeline(
 	VulkanRenderDevice &vkDev,
@@ -171,7 +177,7 @@ bool createGraphicsPipeline(
 
 uint32_t bytesPerTexFormat(VkFormat fmt);
 bool hasStencilComponent(VkFormat format);
-void destroyVulkanImage(VkDevice device, VulkanImage& image);
+void destroyVulkanImage(VkDevice device, VulkanImage &image);
 
 inline VkPipelineShaderStageCreateInfo shaderStageInfo(VkShaderStageFlagBits shaderStage, ShaderModule &module, const char *entryPoint)
 {
@@ -193,4 +199,17 @@ inline VkDescriptorSetLayoutBinding descriptorSetLayoutBinding(uint32_t binding,
 		.descriptorCount = descriptorCount,
 		.stageFlags = stageFlags,
 		.pImmutableSamplers = nullptr};
+}
+
+inline VkWriteDescriptorSet bufferWriteDescriptorSet(VkDescriptorSet ds, const VkDescriptorBufferInfo *bi, uint32_t bindIdx, VkDescriptorType dType)
+{
+	return VkWriteDescriptorSet{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr,
+								ds, bindIdx, 0, 1, dType, nullptr, bi, nullptr};
+}
+
+inline VkWriteDescriptorSet imageWriteDescriptorSet(VkDescriptorSet ds, const VkDescriptorImageInfo *ii, uint32_t bindIdx)
+{
+	return VkWriteDescriptorSet{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr,
+								ds, bindIdx, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+								ii, nullptr, nullptr};
 }
