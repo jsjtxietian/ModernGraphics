@@ -1,6 +1,7 @@
 #include "Utils/Utils.h"
 #include "UtilsVulkan.h"
 #include "Utils/Bitmap.h"
+#include "Utils/UtilsCubemap.h"
 
 #include "StandAlone/ResourceLimits.h"
 
@@ -1726,4 +1727,51 @@ bool createGraphicsPipeline(
 		vkDestroyShaderModule(vkDev.device, m.shaderModule, nullptr);
 
 	return true;
+}
+
+// ============================= Cube Map =================================
+static void float24to32(int w, int h, const float *img24, float *img32)
+{
+	const int numPixels = w * h;
+	for (int i = 0; i != numPixels; i++)
+	{
+		*img32++ = *img24++;
+		*img32++ = *img24++;
+		*img32++ = *img24++;
+		*img32++ = 1.0f;
+	}
+}
+
+bool createCubeTextureImage(VulkanRenderDevice &vkDev, const char *filename, VkImage &textureImage, VkDeviceMemory &textureImageMemory, uint32_t *width, uint32_t *height)
+{
+	int w, h, comp;
+	const float *img = stbi_loadf(filename, &w, &h, &comp, 3);
+	std::vector<float> img32(w * h * 4);
+
+	float24to32(w, h, img, img32.data());
+
+	if (!img)
+	{
+		printf("Failed to load [%s] texture\n", filename);
+		fflush(stdout);
+		return false;
+	}
+
+	stbi_image_free((void *)img);
+
+	Bitmap in(w, h, 4, eBitmapFormat_Float, img32.data());
+	Bitmap out = convertEquirectangularMapToVerticalCross(in);
+
+	Bitmap cube = convertVerticalCrossToCubeMapFaces(out);
+
+	if (width && height)
+	{
+		*width = w;
+		*height = h;
+	}
+
+	return createTextureImageFromData(vkDev, textureImage, textureImageMemory,
+									  cube.data_.data(), cube.w_, cube.h_,
+									  VK_FORMAT_R32G32B32A32_SFLOAT,
+									  6, VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT);
 }
