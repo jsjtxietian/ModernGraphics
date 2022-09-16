@@ -29,8 +29,8 @@ VulkanCanvas::VulkanCanvas(VulkanRenderDevice &vkDev, VulkanImage depth)
         !createDescriptorSet(vkDev) ||
         !createPipelineLayout(vkDev.device, descriptorSetLayout_, &pipelineLayout_) ||
         !createGraphicsPipeline(vkDev, renderPass_, pipelineLayout_,
-                                {"data/shaders/chapter04/Lines.vert",
-                                 "data/shaders/chapter04/Lines.frag"},
+                                {"data/shaders/Lines.vert",
+                                 "data/shaders/Lines.frag"},
                                 &graphicsPipeline_, VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
                                 (depth.image != VK_NULL_HANDLE), true))
     {

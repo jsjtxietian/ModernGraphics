@@ -179,6 +179,8 @@ uint32_t bytesPerTexFormat(VkFormat fmt);
 bool hasStencilComponent(VkFormat format);
 void destroyVulkanImage(VkDevice device, VulkanImage &image);
 
+bool createCubeTextureImage(VulkanRenderDevice &vkDev, const char *filename, VkImage &textureImage, VkDeviceMemory &textureImageMemory, uint32_t *width = nullptr, uint32_t *height = nullptr);
+
 inline VkPipelineShaderStageCreateInfo shaderStageInfo(VkShaderStageFlagBits shaderStage, ShaderModule &module, const char *entryPoint)
 {
 	return VkPipelineShaderStageCreateInfo{

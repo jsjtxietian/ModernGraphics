@@ -1,3 +1,4 @@
+#if 0
 #include <stdio.h>
 #include <stdlib.h>
 #include <vector>
@@ -292,3 +293,5 @@ int main(void)
 
     return 0;
 }
+
+#endif

@@ -19,10 +19,10 @@
 #include "Vulkan/VulkanImGui.h"
 #include "Vulkan/VulkanClear.h"
 #include "Vulkan/VulkanFinish.h"
-#include "Vulkan/VulkanModelRenderer.h"
+#include "Vulkan/ModelRenderer.h"
 #include "Scene/Camera.h"
 #include "Utils/EasyProfilerWrapper.h"
-#include "shared/Graph.h"
+#include "Utils/Graph.h"
 
 #include <glm/glm.hpp>
 #include <glm/ext.hpp>
@@ -35,6 +35,7 @@ const uint32_t kScreenHeight = 720;
 
 GLFWwindow *window;
 
+// declare a Vulkan instance and render device objects
 VulkanInstance vk;
 VulkanRenderDevice vkDev;
 
@@ -87,10 +88,15 @@ bool initVulkan()
         exit(EXIT_FAILURE);
 
     imgui = std::make_unique<ImGuiRenderer>(vkDev);
-    modelRenderer = std::make_unique<ModelRenderer>(vkDev, "data/rubber_duck/scene.gltf", "data/ch2_sample3_STB.jpg", (uint32_t)sizeof(glm::mat4));
-    cubeRenderer = std::make_unique<CubeRenderer>(vkDev, modelRenderer->getDepthTexture(), "data/piazza_bologni_1k.hdr");
+    // modelRenderer is initialized before other layers, since it contains a depth buffer
+    modelRenderer = std::make_unique<ModelRenderer>(vkDev, "data/rubber_duck/scene.gltf", 
+        "data/stb_sample.jpg", (uint32_t)sizeof(glm::mat4));
+    cubeRenderer = std::make_unique<CubeRenderer>(vkDev, modelRenderer->getDepthTexture(), 
+        "data/piazza_bologni_1k.hdr");
+    // The clear, finish, and canvas layers use the depth buffer from modelRenderer as well
     clear = std::make_unique<VulkanClear>(vkDev, modelRenderer->getDepthTexture());
     finish = std::make_unique<VulkanFinish>(vkDev, modelRenderer->getDepthTexture());
+    // takes an empty depth texture to disable depth testing
     canvas2d = std::make_unique<VulkanCanvas>(vkDev, VulkanImage{.image = VK_NULL_HANDLE, .imageView = VK_NULL_HANDLE});
     canvas = std::make_unique<VulkanCanvas>(vkDev, modelRenderer->getDepthTexture());
 
@@ -110,6 +116,7 @@ void terminateVulkan()
     destroyVulkanInstance(vk);
 }
 
+// called from renderGUI() when the user changes the camera mode
 void reinitCamera()
 {
     if (!strcmp(cameraType, "FirstPerson"))
@@ -138,6 +145,7 @@ void renderGUI(uint32_t imageIndex)
     io.DisplaySize = ImVec2((float)width, (float)height);
     ImGui::NewFrame();
 
+    // Render the FPS counter in a borderless ImGui window so that just the text is rendered on the screen
     const ImGuiWindowFlags flags =
         ImGuiWindowFlags_NoTitleBar |
         ImGuiWindowFlags_NoResize |
@@ -152,6 +160,7 @@ void renderGUI(uint32_t imageIndex)
     ImGui::Text("FPS: %.2f", fpsCounter.getFPS());
     ImGui::End();
 
+    // Render the camera controls window
     ImGui::Begin("Camera Control", nullptr);
     {
         // The second parameter is the label previewed before opening the combo.
@@ -180,6 +189,7 @@ void renderGUI(uint32_t imageIndex)
                 positioner_moveTo.setDesiredAngles(cameraAngles);
         }
 
+        // Reinitialize the camera if the camera mode has changed
         if (currentComboBoxItem && strcmp(currentComboBoxItem, cameraType))
         {
             printf("Selected new camera type: %s\n", currentComboBoxItem);
@@ -187,12 +197,14 @@ void renderGUI(uint32_t imageIndex)
             reinitCamera();
         }
     }
+    // Finalize the ImGui rendering and update the Vulkan buffers before issuing any Vulkan drawing commands
     ImGui::End();
     ImGui::Render();
 
     imgui->updateBuffers(vkDev, imageIndex, ImGui::GetDrawData());
 }
 
+// calculates the appropriate view and projection matrices for all objects and updates uniform buffers
 void update3D(uint32_t imageIndex)
 {
     int width, height;
@@ -215,6 +227,7 @@ void update3D(uint32_t imageIndex)
     }
 }
 
+// for the user interface and onscreen graphs
 void update2D(uint32_t imageIndex)
 {
     canvas2d->clear();
@@ -225,12 +238,15 @@ void update2D(uint32_t imageIndex)
 
 void composeFrame(uint32_t imageIndex, const std::vector<RendererBase *> &renderers)
 {
+    // First, all the 2D, 3D, and user interface rendering data is updated
     update3D(imageIndex);
     renderGUI(imageIndex);
     update2D(imageIndex);
 
-    EASY_BLOCK("FillCommandBuffers");
+    // EASY_BLOCK("FillCommandBuffers");
 
+    // begin to fill a new command buffer by iterating all the layer renderers and
+    // calling their fillCommandBuffer() virtual function
     VkCommandBuffer commandBuffer = vkDev.commandBuffers[imageIndex];
 
     const VkCommandBufferBeginInfo bi =
@@ -247,7 +263,7 @@ void composeFrame(uint32_t imageIndex, const std::vector<RendererBase *> &render
 
     VK_CHECK(vkEndCommandBuffer(commandBuffer));
 
-    EASY_END_BLOCK;
+    // EASY_END_BLOCK;
 }
 
 bool drawFrame(const std::vector<RendererBase *> &renderers)
@@ -258,6 +274,8 @@ bool drawFrame(const std::vector<RendererBase *> &renderers)
     VkResult result = vkAcquireNextImageKHR(vkDev.device, vkDev.swapchain, 0, vkDev.semaphore, VK_NULL_HANDLE, &imageIndex);
     VK_CHECK(vkResetCommandPool(vkDev.device, vkDev.commandPool, 0));
 
+    // if the next swapchain image is not yet available, we should return and skip this frame.
+    // It might just be that our GPU is rendering frames slower than we are filling in the command buffers
     if (result != VK_SUCCESS)
         return false;
 
@@ -265,6 +283,7 @@ bool drawFrame(const std::vector<RendererBase *> &renderers)
 
     const VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT}; // or even VERTEX_SHADER_STAGE
 
+    // Submit the command buffer into the Vulkan graphics queue:
     const VkSubmitInfo si =
         {
             .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
@@ -278,9 +297,9 @@ bool drawFrame(const std::vector<RendererBase *> &renderers)
             .pSignalSemaphores = &vkDev.renderSemaphore};
 
     {
-        EASY_BLOCK("vkQueueSubmit", profiler::colors::Magenta);
+        // EASY_BLOCK("vkQueueSubmit", profiler::colors::Magenta);
         VK_CHECK(vkQueueSubmit(vkDev.graphicsQueue, 1, &si, nullptr));
-        EASY_END_BLOCK;
+        // EASY_END_BLOCK;
     }
 
     const VkPresentInfoKHR pi =
@@ -294,15 +313,17 @@ bool drawFrame(const std::vector<RendererBase *> &renderers)
             .pImageIndices = &imageIndex};
 
     {
-        EASY_BLOCK("vkQueuePresentKHR", profiler::colors::Magenta);
+        // Present the results on the screen:
+        // EASY_BLOCK("vkQueuePresentKHR", profiler::colors::Magenta);
         VK_CHECK(vkQueuePresentKHR(vkDev.graphicsQueue, &pi));
-        EASY_END_BLOCK;
+        // EASY_END_BLOCK;
     }
 
     {
-        EASY_BLOCK("vkDeviceWaitIdle", profiler::colors::Red);
+        // Wait for the GPU to finish rendering:
+        // EASY_BLOCK("vkDeviceWaitIdle", profiler::colors::Red);
         VK_CHECK(vkDeviceWaitIdle(vkDev.device));
-        EASY_END_BLOCK;
+        // EASY_END_BLOCK;
     }
 
     return true;
@@ -378,7 +399,8 @@ int main()
     initVulkan();
 
     {
-        canvas->plane3d(vec3(0, +1.5, 0), vec3(1, 0, 0), vec3(0, 0, 1), 40, 40, 10.0f, 10.0f, vec4(1, 0, 0, 1), vec4(0, 1, 0, 1));
+        canvas->plane3d(vec3(0, +1.5, 0), vec3(1, 0, 0), vec3(0, 0, 1),
+                        40, 40, 10.0f, 10.0f, vec4(1, 0, 0, 1), vec4(0, 1, 0, 1));
 
         for (size_t i = 0; i < vkDev.swapchainImages.size(); i++)
             canvas->updateBuffer(vkDev, i);
@@ -387,16 +409,18 @@ int main()
     double timeStamp = glfwGetTime();
     float deltaSeconds = 0.0f;
 
-    const std::vector<RendererBase *> renderers = {clear.get(), cubeRenderer.get(), modelRenderer.get(), canvas.get(), canvas2d.get(), imgui.get(), finish.get()};
+    const std::vector<RendererBase *> renderers =
+        {clear.get(), cubeRenderer.get(), modelRenderer.get(),
+         canvas.get(), canvas2d.get(), imgui.get(), finish.get()};
 
     while (!glfwWindowShouldClose(window))
     {
         {
-            EASY_BLOCK("UpdateCameraPositioners")
+            // EASY_BLOCK("UpdateCameraPositioners")
             // update both camera positioners
             positioner_firstPerson.update(deltaSeconds, mouseState.pos, mouseState.pressedLeft);
             positioner_moveTo.update(deltaSeconds, mouseState.pos, mouseState.pressedLeft);
-            EASY_END_BLOCK;
+            // EASY_END_BLOCK;
         }
 
         const double newTimeStamp = glfwGetTime();
@@ -412,9 +436,9 @@ int main()
         sineGraph.addPoint((float)sin(glfwGetTime() * 10.0));
 
         {
-            EASY_BLOCK("PollEvents");
+            // EASY_BLOCK("PollEvents");
             glfwPollEvents();
-            EASY_END_BLOCK;
+            // EASY_END_BLOCK;
         }
     }
 
@@ -424,7 +448,7 @@ int main()
     glfwTerminate();
     glslang_finalize_process();
 
-    PROFILER_DUMP("profiling.prof");
+    // PROFILER_DUMP("profiling.prof");
 
     return 0;
 }
