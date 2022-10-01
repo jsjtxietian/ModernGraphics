@@ -15,3 +15,4 @@
 * glslang 6fe560f74f472726027e4059692c6eb1e7d972dc
 * vulkan v1.2.178
 * tinyobject loader for vulkan_mini_example
+* Amazon Lumberyard Bistro from http://casual-effects.com/data/index.html
