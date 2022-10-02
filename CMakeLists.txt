@@ -171,4 +171,31 @@ if(BUILD_WITH_OPTICK)
 	target_link_libraries(SampleTest OptickCore)
 endif()
 
+# mesh converter
+project("Mesh Converter")
+file(GLOB_RECURSE UTIL_SOURCE LIST_DIRECTORIES false RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} src/Utils/*.c??)
+file(GLOB_RECURSE UTIL_HEAD LIST_DIRECTORIES false RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} src/Utils/*.h)
+file(GLOB_RECURSE SCENE_SOURCE LIST_DIRECTORIES false RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} src/Scene/*.c??)
+file(GLOB_RECURSE SCENE_HEAD LIST_DIRECTORIES false RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} src/Scene/*.h)
+SETUP_GROUPS("${UTIL_SOURCE}")
+SETUP_GROUPS("${UTIL_HEAD}")
+SETUP_GROUPS("${SCENE_SOURCE}")
+SETUP_GROUPS("${SCENE_HEAD}")
+include_directories(src)
+include_directories(3rdparty)
+
+add_executable(MeshConverter ${UTIL_SOURCE} ${UTIL_HEAD} ${SCENE_SOURCE} ${SCENE_HEAD} ${CMAKE_CURRENT_SOURCE_DIR}/Tool/MeshConverter.cpp)
+
+#complier MSVC
+if(MSVC)
+    add_compile_options(-W4)
+    add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+    add_definitions(-D_CONSOLE)
+    # add_definitions(-DVULKAN)
+    # add_definitions(-DOPENGL)
+    set_property(TARGET MeshConverter PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+endif()
+
+target_link_libraries(MeshConverter assimp meshoptimizer)
+
 
