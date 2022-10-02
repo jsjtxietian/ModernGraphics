@@ -1,16 +1,5 @@
-#pragma once
-
-#include <stdint.h>
-
-#include <glm/glm.hpp>
-
-#include "Utils/Utils.h"
-#include "Utils/UtilsMath.h"
-
-constexpr const uint32_t kMaxLODs = 8;
-constexpr const uint32_t kMaxStreams = 8;
-
 // A vector of homogenous vertex attributes stored contiguously is called a vertex stream.
+// we assume tightly-packed (Interleaved) vertex attribute streams
 
 // LOD is an index buffer of reduced size that uses existing vertices and, therefore, can be
 // used directly for rendering with the original vertex buffer.
@@ -22,6 +11,18 @@ constexpr const uint32_t kMaxStreams = 8;
 // All of the vertex data streams and LOD index buffers are packed into a single blob. This
 // allows us to load data in a single fread() call or even use memory mapping to allow
 // direct data access.
+
+#pragma once
+
+#include <stdint.h>
+
+#include <glm/glm.hpp>
+
+#include "Utils/Utils.h"
+#include "Utils/UtilsMath.h"
+
+constexpr const uint32_t kMaxLODs = 8;
+constexpr const uint32_t kMaxStreams = 8;
 
 // All offsets are relative to the beginning of the data block (excluding headers with Mesh list)
 struct Mesh final
@@ -49,6 +50,7 @@ struct Mesh final
     uint32_t streamOffset[kMaxStreams] = {0};
 
     /* Information about stream element (size pretty much defines everything else, the "semantics" is defined by the shader) */
+    // might want to store the element type, such as byte, or float. This information is important for performance reasons
     uint32_t streamElementSize[kMaxStreams] = {0};
 
     /* We could have included the streamStride[] array here to allow interleaved storage of attributes.
@@ -60,6 +62,7 @@ struct Mesh final
 struct MeshFileHeader
 {
     /* Unique 64-bit value to check integrity of the file */
+    // 0x12345678
     uint32_t magicValue;
 
     /* Number of mesh descriptors following this header */
@@ -89,6 +92,8 @@ struct DrawData
 
 struct MeshData
 {
+    // the indexData and vertexData containers can be uploaded into the GPU directly
+    // and accessed as data buffers from shaders to implement programmable vertex pulling
     std::vector<uint32_t> indexData_;
     std::vector<float> vertexData_;
     std::vector<Mesh> meshes_;
