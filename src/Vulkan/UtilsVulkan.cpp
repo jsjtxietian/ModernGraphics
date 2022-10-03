@@ -457,7 +457,9 @@ VkResult createSemaphore(VkDevice device, VkSemaphore *outSemaphore)
 	return vkCreateSemaphore(device, &ci, nullptr, outSemaphore);
 }
 
-bool initVulkanRenderDevice(VulkanInstance &vk, VulkanRenderDevice &vkDev, uint32_t width, uint32_t height, std::function<bool(VkPhysicalDevice)> selector, VkPhysicalDeviceFeatures deviceFeatures)
+bool initVulkanRenderDevice(VulkanInstance &vk, VulkanRenderDevice &vkDev,
+							uint32_t width, uint32_t height, std::function<bool(VkPhysicalDevice)> selector,
+							VkPhysicalDeviceFeatures deviceFeatures)
 {
 	vkDev.framebufferWidth = width;
 	vkDev.framebufferHeight = height;
@@ -1072,7 +1074,8 @@ void uploadBufferData(VulkanRenderDevice &vkDev, const VkDeviceMemory &bufferMem
 	vkUnmapMemory(vkDev.device, bufferMemory);
 }
 
-bool createColorAndDepthFramebuffers(VulkanRenderDevice &vkDev, VkRenderPass renderPass, VkImageView depthImageView, std::vector<VkFramebuffer> &swapchainFramebuffers)
+bool createColorAndDepthFramebuffers(VulkanRenderDevice &vkDev, VkRenderPass renderPass,
+									 VkImageView depthImageView, std::vector<VkFramebuffer> &swapchainFramebuffers)
 {
 	swapchainFramebuffers.resize(vkDev.swapchainImageViews.size());
 
