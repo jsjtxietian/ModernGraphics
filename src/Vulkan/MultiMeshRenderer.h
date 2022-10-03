@@ -46,6 +46,7 @@ private:
     uint32_t maxDrawDataSize_;
     uint32_t maxMaterialSize_;
 
+    // This renderer contains all the index and vertex data in a single, large GPU buffer.
     // 6. Storage Buffer with index and vertex data
     VkBuffer storageBuffer_;
     VkDeviceMemory storageBufferMemory_;
@@ -53,6 +54,7 @@ private:
     VkBuffer materialBuffer_;
     VkDeviceMemory materialBufferMemory_;
 
+    // For each of the swapchain images, declare a copy of indirect rendering data.
     std::vector<VkBuffer> indirectBuffers_;
     std::vector<VkDeviceMemory> indirectBuffersMemory_;
 
