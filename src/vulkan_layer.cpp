@@ -1,3 +1,4 @@
+#if 0
 #define VK_NO_PROTOTYPES
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -89,10 +90,10 @@ bool initVulkan()
 
     imgui = std::make_unique<ImGuiRenderer>(vkDev);
     // modelRenderer is initialized before other layers, since it contains a depth buffer
-    modelRenderer = std::make_unique<ModelRenderer>(vkDev, "data/rubber_duck/scene.gltf", 
-        "data/stb_sample.jpg", (uint32_t)sizeof(glm::mat4));
-    cubeRenderer = std::make_unique<CubeRenderer>(vkDev, modelRenderer->getDepthTexture(), 
-        "data/piazza_bologni_1k.hdr");
+    modelRenderer = std::make_unique<ModelRenderer>(vkDev, "data/rubber_duck/scene.gltf",
+                                                    "data/stb_sample.jpg", (uint32_t)sizeof(glm::mat4));
+    cubeRenderer = std::make_unique<CubeRenderer>(vkDev, modelRenderer->getDepthTexture(),
+                                                  "data/piazza_bologni_1k.hdr");
     // The clear, finish, and canvas layers use the depth buffer from modelRenderer as well
     clear = std::make_unique<VulkanClear>(vkDev, modelRenderer->getDepthTexture());
     finish = std::make_unique<VulkanFinish>(vkDev, modelRenderer->getDepthTexture());
@@ -452,3 +453,5 @@ int main()
 
     return 0;
 }
+
+#endif
