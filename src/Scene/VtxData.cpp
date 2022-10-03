@@ -10,11 +10,10 @@ MeshFileHeader loadMeshData(const char *meshFile, MeshData &out)
 
 	FILE *f = fopen(meshFile, "rb");
 
-	assert(f); // Did you forget to run "Ch5_Tool05_MeshConvert"?
-
+	assert(f); 
 	if (!f)
 	{
-		printf("Cannot open %s. Did you forget to run \"Ch5_Tool05_MeshConvert\"?\n", meshFile);
+		printf("Cannot open %s. Did you forget to run \"MeshConverter\"?\n", meshFile);
 		exit(EXIT_FAILURE);
 	}
 
