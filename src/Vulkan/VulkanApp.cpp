@@ -2,6 +2,8 @@
 
 Resolution detectResolution(int width, int height)
 {
+    // we get the parameters of the "primary" monitor.
+    // In multi-display configurations, we should properly determine which monitor displays our application
     GLFWmonitor *monitor = glfwGetPrimaryMonitor();
     const int code = glfwGetError(nullptr);
 
@@ -13,6 +15,7 @@ Resolution detectResolution(int width, int height)
 
     const GLFWvidmode *info = glfwGetVideoMode(monitor);
 
+    // Negative values are treated as a percentage of the screen
     const uint32_t windowW = width > 0 ? width : (uint32_t)(info->width * width / -100);
     const uint32_t windowH = height > 0 ? height : (uint32_t)(info->height * height / -100);
 
@@ -51,15 +54,23 @@ GLFWwindow *initVulkanApp(int width, int height, Resolution *resolution)
     return result;
 }
 
-bool drawFrame(VulkanRenderDevice &vkDev, const std::function<void(uint32_t)> &updateBuffersFunc, const std::function<void(VkCommandBuffer, uint32_t)> &composeFrameFunc)
+// common frame-composition code
+bool drawFrame(VulkanRenderDevice &vkDev, const std::function<void(uint32_t)> &updateBuffersFunc,
+               const std::function<void(VkCommandBuffer, uint32_t)> &composeFrameFunc)
 {
     uint32_t imageIndex = 0;
-    VkResult result = vkAcquireNextImageKHR(vkDev.device, vkDev.swapchain, 0, vkDev.semaphore, VK_NULL_HANDLE, &imageIndex);
+    VkResult result = vkAcquireNextImageKHR(vkDev.device, vkDev.swapchain, 0,
+                                            vkDev.semaphore, VK_NULL_HANDLE, &imageIndex);
     VK_CHECK(vkResetCommandPool(vkDev.device, vkDev.commandPool, 0));
 
+    // The calling code decides what to do with the result.
+    // such as skipping the frames-per-second (FPS) counter update
     if (result != VK_SUCCESS)
         return false;
 
+    // update all the internal buffers for different renderers
+    // This can be done in a more effective way—for example, by
+    // using a dedicated transfer queue and without waiting for all the GPU transfers to complete.
     updateBuffersFunc(imageIndex);
 
     VkCommandBuffer commandBuffer = vkDev.commandBuffers[imageIndex];
@@ -73,11 +84,15 @@ bool drawFrame(VulkanRenderDevice &vkDev, const std::function<void(uint32_t)> &u
 
     VK_CHECK(vkBeginCommandBuffer(commandBuffer, &bi));
 
+    // There is a large potential for optimizations here
+    // because Vulkan provides a primary-secondary command buffer separation, which
+    // can be used to record secondary buffers from multiple CPU threads.
     composeFrameFunc(commandBuffer, imageIndex);
 
     VK_CHECK(vkEndCommandBuffer(commandBuffer));
 
-    const VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT}; // or even VERTEX_SHADER_STAGE
+    // or even VERTEX_SHADER_STAGE
+    const VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
 
     const VkSubmitInfo si =
         {
@@ -105,6 +120,7 @@ bool drawFrame(VulkanRenderDevice &vkDev, const std::function<void(uint32_t)> &u
 
     VK_CHECK(vkQueuePresentKHR(vkDev.graphicsQueue, &pi));
     VK_CHECK(vkDeviceWaitIdle(vkDev.device));
+    // More sophisticated synchronization schemes with multiple in-flight frames can help to gain performance.
 
     return true;
 }
