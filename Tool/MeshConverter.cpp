@@ -17,61 +17,69 @@ constexpr uint32_t g_numElementsToStore = 3 + 2 + 3;
 float g_meshScale = 0.01f;
 bool g_calculateLODs = false;
 
-// void processLods(std::vector<uint32_t> &indices, std::vector<float> &vertices, std::vector<std::vector<uint32_t>> &outLods)
-// {
-//     size_t verticesCountIn = vertices.size() / 2;
-//     size_t targetIndicesCount = indices.size();
+// The LOD meshes are represented as a collection of indices that construct a new
+// simplified mesh from the same vertices that are used for the original mesh. This
+// way, we only have to store one set of vertices and can render the corresponding
+// LODs by simply switching the index buffer data.
+void processLods(std::vector<uint32_t> &indices, std::vector<float> &vertices,
+                 std::vector<std::vector<uint32_t>> &outLods)
+{
+    size_t verticesCountIn = vertices.size() / 3;
+    size_t targetIndicesCount = indices.size();
 
-//     uint8_t LOD = 1;
+    // The first "zero" LOD corresponds to the original mesh indices. Push it as-is into the resulting container
+    uint8_t LOD = 1;
+    printf("\n   LOD0: %i indices", int(indices.size()));
+    outLods.push_back(indices);
 
-//     printf("\n   LOD0: %i indices", int(indices.size()));
+    while (targetIndicesCount > 1024 && LOD < 8)
+    {
+        targetIndicesCount = indices.size() / 2;
 
-//     outLods.push_back(indices);
+        bool sloppy = false;
 
-//     while (targetIndicesCount > 1024 && LOD < 8)
-//     {
-//         targetIndicesCount = indices.size() / 2;
+        // tries to follow the topology of the original mesh.
+        // This is so that the attribute seams, borders, and overall appearance can be preserved.
+        // The target error value of 0.02 corresponds to the 2% deviation from the original mesh
+        size_t numOptIndices = meshopt_simplify(
+            indices.data(),
+            indices.data(), (uint32_t)indices.size(),
+            vertices.data(), verticesCountIn,
+            sizeof(float) * 3,
+            targetIndicesCount, 0.02f);
 
-//         bool sloppy = false;
+        // cannot simplify further
+        // meshopt_simplifySloppy does not follow the topology of the original mesh.
+        // This means it can be more aggressive by collapsing internal mesh details that are too
+        // small to matter because they are topologically disjointed but spatially close
+        if (static_cast<size_t>(numOptIndices * 1.1f) > indices.size())
+        {
+            if (LOD > 1)
+            {
+                // try harder
+                numOptIndices = meshopt_simplifySloppy(
+                    indices.data(),
+                    indices.data(), indices.size(),
+                    vertices.data(), verticesCountIn,
+                    sizeof(float) * 3,
+                    targetIndicesCount, 0.02f);
+                sloppy = true;
+                if (numOptIndices == indices.size())
+                    break;
+            }
+            else
+                break;
+        }
 
-//         size_t numOptIndices = meshopt_simplify(
-//             indices.data(),
-//             indices.data(), (uint32_t)indices.size(),
-//             vertices.data(), verticesCountIn,
-//             sizeof(float) * 3,
-//             targetIndicesCount, 0.02f);
+        indices.resize(numOptIndices);
+        // optimize each LOD for the vertex cache
+        meshopt_optimizeVertexCache(indices.data(), indices.data(), indices.size(), verticesCountIn);
+        printf("\n   LOD%i: %i indices %s", int(LOD), int(numOptIndices), sloppy ? "[sloppy]" : "");
 
-//         // cannot simplify further
-//         if (static_cast<size_t>(numOptIndices * 1.1f) > indices.size())
-//         {
-//             if (LOD > 1)
-//             {
-//                 // try harder
-//                 numOptIndices = meshopt_simplifySloppy(
-//                     indices.data(),
-//                     indices.data(), indices.size(),
-//                     vertices.data(), verticesCountIn,
-//                     sizeof(float) * 3,
-//                     targetIndicesCount, 0.02f);
-//                 sloppy = true;
-//                 if (numOptIndices == indices.size())
-//                     break;
-//             }
-//             else
-//                 break;
-//         }
-
-//         indices.resize(numOptIndices);
-
-//         meshopt_optimizeVertexCache(indices.data(), indices.data(), indices.size(), verticesCountIn);
-
-//         printf("\n   LOD%i: %i indices %s", int(LOD), int(numOptIndices), sloppy ? "[sloppy]" : "");
-
-//         LOD++;
-
-//         outLods.push_back(indices);
-//     }
-// }
+        LOD++;
+        outLods.push_back(indices);
+    }
+}
 
 Mesh convertAIMesh(const aiMesh *m)
 {
@@ -131,7 +139,7 @@ Mesh convertAIMesh(const aiMesh *m)
         outLods.push_back(srcIndices);
     else
     {
-        // processLods(srcIndices, srcVertices, outLods);
+        processLods(srcIndices, srcVertices, outLods);
     }
 
     printf("\nCalculated LOD count: %u\n", (unsigned)outLods.size());
