@@ -507,6 +507,141 @@ bool initVulkanRenderDevice(VulkanInstance &vk, VulkanRenderDevice &vkDev,
 	return true;
 }
 
+VkResult createDeviceWithCompute(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures deviceFeatures,
+								 uint32_t graphicsFamily, uint32_t computeFamily, VkDevice *device)
+{
+	const std::vector<const char *> extensions =
+		{
+			VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+
+	if (graphicsFamily == computeFamily)
+		return createDevice(physicalDevice, deviceFeatures, graphicsFamily, device);
+
+	const float queuePriorities[2] = {0.f, 0.f};
+	// graphics queue creation structure refers to the graphics queue family index
+	const VkDeviceQueueCreateInfo qciGfx =
+		{
+			.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+			.pNext = nullptr,
+			.flags = 0,
+			.queueFamilyIndex = graphicsFamily,
+			.queueCount = 1,
+			.pQueuePriorities = &queuePriorities[0]};
+
+	const VkDeviceQueueCreateInfo qciComp =
+		{
+			.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+			.pNext = nullptr,
+			.flags = 0,
+			.queueFamilyIndex = computeFamily,
+			.queueCount = 1,
+			.pQueuePriorities = &queuePriorities[1]};
+
+	const VkDeviceQueueCreateInfo qci[2] = {qciGfx, qciComp};
+
+	const VkDeviceCreateInfo ci =
+		{
+			.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+			.pNext = nullptr,
+			.flags = 0,
+			.queueCreateInfoCount = 2,
+			.pQueueCreateInfos = qci,
+			.enabledLayerCount = 0,
+			.ppEnabledLayerNames = nullptr,
+			.enabledExtensionCount = static_cast<uint32_t>(extensions.size()),
+			.ppEnabledExtensionNames = extensions.data(),
+			.pEnabledFeatures = &deviceFeatures};
+
+	return vkCreateDevice(physicalDevice, &ci, nullptr, device);
+}
+
+bool initVulkanRenderDeviceWithCompute(VulkanInstance &vk, VulkanRenderDevice &vkDev,
+									   uint32_t width, uint32_t height,
+									   VkPhysicalDeviceFeatures deviceFeatures)
+{
+	vkDev.framebufferWidth = width;
+	vkDev.framebufferHeight = height;
+
+	VK_CHECK(findSuitablePhysicalDevice(vk.instance, &isDeviceSuitable, &vkDev.physicalDevice));
+	vkDev.graphicsFamily = findQueueFamilies(vkDev.physicalDevice, VK_QUEUE_GRAPHICS_BIT);
+	// This code will find a combined graphics plus compute queue even on
+	// devices that support a separate compute queue, as the combined queue tends to have a lower index
+	vkDev.computeFamily = findQueueFamilies(vkDev.physicalDevice, VK_QUEUE_COMPUTE_BIT);
+	//	VK_CHECK(vkGetBestComputeQueue(vkDev.physicalDevice, &vkDev.computeFamily));
+	VK_CHECK(createDeviceWithCompute(vkDev.physicalDevice, deviceFeatures, vkDev.graphicsFamily, vkDev.computeFamily, &vkDev.device));
+
+	// save unique queue indices for later use in the createSharedBuffer()
+	vkDev.deviceQueueIndices.push_back(vkDev.graphicsFamily);
+	if (vkDev.graphicsFamily != vkDev.computeFamily)
+		vkDev.deviceQueueIndices.push_back(vkDev.computeFamily);
+
+	vkGetDeviceQueue(vkDev.device, vkDev.graphicsFamily, 0, &vkDev.graphicsQueue);
+	if (vkDev.graphicsQueue == nullptr)
+		exit(EXIT_FAILURE);
+
+	vkGetDeviceQueue(vkDev.device, vkDev.computeFamily, 0, &vkDev.computeQueue);
+	if (vkDev.computeQueue == nullptr)
+		exit(EXIT_FAILURE);
+
+	VkBool32 presentSupported = 0;
+	vkGetPhysicalDeviceSurfaceSupportKHR(vkDev.physicalDevice, vkDev.graphicsFamily, vk.surface, &presentSupported);
+	if (!presentSupported)
+		exit(EXIT_FAILURE);
+
+	VK_CHECK(createSwapchain(vkDev.device, vkDev.physicalDevice, vk.surface, vkDev.graphicsFamily, width, height, &vkDev.swapchain));
+	const size_t imageCount = createSwapchainImages(vkDev.device, vkDev.swapchain, vkDev.swapchainImages, vkDev.swapchainImageViews);
+	vkDev.commandBuffers.resize(imageCount);
+
+	VK_CHECK(createSemaphore(vkDev.device, &vkDev.semaphore));
+	VK_CHECK(createSemaphore(vkDev.device, &vkDev.renderSemaphore));
+
+	// for each swapchain image, we create a separate command queue
+	const VkCommandPoolCreateInfo cpi =
+		{
+			.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+			.flags = 0,
+			.queueFamilyIndex = vkDev.graphicsFamily};
+
+	VK_CHECK(vkCreateCommandPool(vkDev.device, &cpi, nullptr, &vkDev.commandPool));
+
+	const VkCommandBufferAllocateInfo ai =
+		{
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+			.pNext = nullptr,
+			.commandPool = vkDev.commandPool,
+			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+			.commandBufferCount = static_cast<uint32_t>(vkDev.swapchainImages.size()),
+		};
+
+	VK_CHECK(vkAllocateCommandBuffers(vkDev.device, &ai, &vkDev.commandBuffers[0]));
+
+	{
+		// create a single command pool for the compute queue
+		const VkCommandPoolCreateInfo cpi1 =
+			{
+				.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+				.pNext = nullptr,
+				.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, /* Allow command from this pool buffers to be reset*/
+				.queueFamilyIndex = vkDev.computeFamily};
+		VK_CHECK(vkCreateCommandPool(vkDev.device, &cpi1, nullptr, &vkDev.computeCommandPool));
+
+		const VkCommandBufferAllocateInfo ai1 =
+			{
+				.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+				.pNext = nullptr,
+				.commandPool = vkDev.computeCommandPool,
+				.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+				.commandBufferCount = 1,
+			};
+
+		VK_CHECK(vkAllocateCommandBuffers(vkDev.device, &ai1, &vkDev.computeCommandBuffer));
+	}
+
+	vkDev.useCompute = true;
+
+	return true;
+}
+
 void destroyVulkanRenderDevice(VulkanRenderDevice &vkDev)
 {
 	for (size_t i = 0; i < vkDev.swapchainImages.size(); i++)
@@ -549,6 +684,43 @@ uint32_t findMemoryType(VkPhysicalDevice device, uint32_t typeFilter, VkMemoryPr
 	}
 
 	return 0xFFFFFFFF;
+}
+
+bool createSharedBuffer(VulkanRenderDevice &vkDev, VkDeviceSize size, VkBufferUsageFlags usage,
+						VkMemoryPropertyFlags properties, VkBuffer &buffer, VkDeviceMemory &bufferMemory)
+{
+	uint32_t familyCount = static_cast<uint32_t>(vkDev.deviceQueueIndices.size());
+
+	if (familyCount < 2)
+		return createBuffer(vkDev.device, vkDev.physicalDevice, size, usage, properties, buffer, bufferMemory);
+
+	// explicitly enumerates the command queues:
+	const VkBufferCreateInfo bufferInfo = {
+		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+		.pNext = nullptr,
+		.flags = 0,
+		.size = size,
+		.usage = usage,
+		.sharingMode = (familyCount > 1) ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE,
+		.queueFamilyIndexCount = static_cast<uint32_t>(vkDev.deviceQueueIndices.size()),
+		.pQueueFamilyIndices = (familyCount > 1) ? vkDev.deviceQueueIndices.data() : nullptr};
+
+	VK_CHECK(vkCreateBuffer(vkDev.device, &bufferInfo, nullptr, &buffer));
+
+	VkMemoryRequirements memRequirements;
+	vkGetBufferMemoryRequirements(vkDev.device, buffer, &memRequirements);
+
+	const VkMemoryAllocateInfo allocInfo = {
+		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+		.pNext = nullptr,
+		.allocationSize = memRequirements.size,
+		.memoryTypeIndex = findMemoryType(vkDev.physicalDevice, memRequirements.memoryTypeBits, properties)};
+
+	VK_CHECK(vkAllocateMemory(vkDev.device, &allocInfo, nullptr, &bufferMemory));
+
+	vkBindBufferMemory(vkDev.device, buffer, bufferMemory, 0);
+
+	return true;
 }
 
 // create a buffer object and an associated device memory region. We will use this function
@@ -1570,6 +1742,74 @@ bool createColorAndDepthRenderPass(VulkanRenderDevice &vkDev, bool useDepth,
 		.pDependencies = dependencies.data()};
 
 	return (vkCreateRenderPass(vkDev.device, &renderPassInfo, nullptr, renderPass) == VK_SUCCESS);
+}
+
+VkResult createComputePipeline(VkDevice device, VkShaderModule computeShader,
+							   VkPipelineLayout pipelineLayout, VkPipeline *pipeline)
+{
+	// The compute pipeline contains a VK_SHADER_STAGE_COMPUTE_BIT single shader stage and
+	// an attached Vulkan shader module
+	VkComputePipelineCreateInfo computePipelineCreateInfo = {
+		.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+		.pNext = nullptr,
+		.flags = 0,
+		.stage = {// ShaderStageInfo, just like in graphics pipeline, but with a single COMPUTE stage
+				  .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+				  .pNext = nullptr,
+				  .flags = 0,
+				  .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+				  .module = computeShader,
+				  // all our compute shaders must have main() as their entry point
+				  .pName = "main",
+				  /* we don't use specialization */
+				  .pSpecializationInfo = nullptr},
+		.layout = pipelineLayout,
+		.basePipelineHandle = 0,
+		.basePipelineIndex = 0};
+
+	/* no caching, single pipeline creation*/
+	return vkCreateComputePipelines(device, 0, 1, &computePipelineCreateInfo, nullptr, pipeline);
+}
+
+bool executeComputeShader(VulkanRenderDevice &vkDev,
+						  VkPipeline pipeline, VkPipelineLayout pipelineLayout, VkDescriptorSet ds,
+						  uint32_t xsize, uint32_t ysize, uint32_t zsize)
+{
+	VkCommandBuffer commandBuffer = vkDev.computeCommandBuffer;
+
+	VkCommandBufferBeginInfo commandBufferBeginInfo = {
+		VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+		0, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, 0};
+
+	VK_CHECK(vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo));
+
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
+
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, &ds, 0, 0);
+
+	// emit the vkCmdDispatch() command with the required execution range
+	vkCmdDispatch(commandBuffer, xsize, ysize, zsize);
+
+	// Before the CPU can read back data written to a buffer by a compute shader, we have
+	// to insert a memory barrier
+	VkMemoryBarrier readoutBarrier = {
+		.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+		.pNext = nullptr,
+		.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+		.dstAccessMask = VK_ACCESS_HOST_READ_BIT};
+
+	vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0, 1, &readoutBarrier, 0, nullptr, 0, nullptr);
+
+	VK_CHECK(vkEndCommandBuffer(commandBuffer));
+
+	VkSubmitInfo submitInfo = {
+		VK_STRUCTURE_TYPE_SUBMIT_INFO,
+		0, 0, 0, 0, 1, &commandBuffer, 0, 0};
+
+	VK_CHECK(vkQueueSubmit(vkDev.computeQueue, 1, &submitInfo, 0));
+	VK_CHECK(vkQueueWaitIdle(vkDev.computeQueue));
+
+	return true;
 }
 
 bool createGraphicsPipeline(

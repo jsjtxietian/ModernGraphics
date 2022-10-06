@@ -46,6 +46,25 @@ struct VulkanRenderDevice final
 
 	VkCommandPool commandPool;
 	std::vector<VkCommandBuffer> commandBuffers;
+
+	// Were we initialized with compute capabilities
+	bool useCompute = false;
+
+	// may coincide with graphicsFamily
+	// If the device does not support a dedicated compute queue, the
+	// values of the computeFamily and the graphicsFamily fields are equal
+	uint32_t computeFamily;
+	VkQueue computeQueue;
+
+	// The lists of initialized queue indices and appropriate queue handles are stored in
+	// two dynamic arrays (for shared buffer allocation)
+	// VkBuffer objects are bound to the device queue at creation time
+	std::vector<uint32_t> deviceQueueIndices;
+	std::vector<VkQueue> deviceQueues;
+
+	// a command buffer and a command buffer pool to create and run compute shader instances
+	VkCommandBuffer computeCommandBuffer;
+	VkCommandPool computeCommandPool;
 };
 
 struct VulkanImage final
@@ -125,9 +144,11 @@ bool createImageView(VkDevice device, VkImage image, VkFormat format, VkImageAsp
 VkResult createSemaphore(VkDevice device, VkSemaphore *outSemaphore);
 
 bool initVulkanRenderDevice(VulkanInstance &vk, VulkanRenderDevice &vkDev, uint32_t width, uint32_t height, std::function<bool(VkPhysicalDevice)> selector, VkPhysicalDeviceFeatures deviceFeatures);
+bool initVulkanRenderDeviceWithCompute(VulkanInstance &vk, VulkanRenderDevice &vkDev, uint32_t width, uint32_t height, VkPhysicalDeviceFeatures deviceFeatures);
 void destroyVulkanRenderDevice(VulkanRenderDevice &vkDev);
 void destroyVulkanInstance(VulkanInstance &vk);
 
+bool createSharedBuffer(VulkanRenderDevice &vkDev, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer &buffer, VkDeviceMemory &bufferMemory);
 bool createBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer &buffer, VkDeviceMemory &bufferMemory);
 VkCommandBuffer beginSingleTimeCommands(VulkanRenderDevice &vkDev);
 void endSingleTimeCommands(VulkanRenderDevice &vkDev, VkCommandBuffer commandBuffer);
@@ -174,6 +195,11 @@ bool createGraphicsPipeline(
 	int32_t customWidth = -1,
 	int32_t customHeight = -1,
 	uint32_t numPatchControlPoints = 0);
+
+VkResult createComputePipeline(VkDevice device, VkShaderModule computeShader, VkPipelineLayout pipelineLayout, VkPipeline *pipeline);
+bool executeComputeShader(VulkanRenderDevice &vkDev,
+						  VkPipeline computePipeline, VkPipelineLayout pl, VkDescriptorSet ds,
+						  uint32_t xsize, uint32_t ysize, uint32_t zsize);
 
 uint32_t bytesPerTexFormat(VkFormat fmt);
 bool hasStencilComponent(VkFormat format);
