@@ -11,6 +11,9 @@ struct ImDrawVert
 
 layout(binding = 1) readonly buffer SBO { ImDrawVert data[]; } sbo;
 
+// The geometry buffer is constant for all rendered rectangles, so we pass a vec2
+// position to shift the origin of our quad on the screen. The textureIndex
+// field corresponds to the same field in AnimationState.
 layout(push_constant) uniform uPushConstant { vec2 position; uint textureIndex; } pc;
 
 void main()

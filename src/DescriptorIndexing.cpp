@@ -1,3 +1,5 @@
+// Multiple explosions, each using a different flipbook, can be rendered simultaneously
+
 #include "Vulkan/VulkanApp.h"
 #include "Vulkan/VulkanClear.h"
 #include "Vulkan/VulkanFinish.h"
@@ -22,12 +24,19 @@ struct AnimationState
 {
     vec2 position = vec2(0);
     double startTime = 0;
+    // textureIndex is the index of the current texture inside the flipbook
     uint32_t textureIndex = 0;
+    // flipbookOffset points to the beginning of the current flipbook in the big array of textures we loaded earlier
     uint32_t flipbookOffset = 0;
 };
 
 std::vector<AnimationState> animations;
 
+// The current texture index is updated for each animation based on its start time.
+// As we go through all animations, we can safely remove finished ones. Instead of using a swap-and-pop
+// pattern here to remove an element from the container, which will create ugly
+// Z-fighting where animations suddenly pop in front of each other, we use a
+// straightforward naive removal via erase()
 void updateAnimations()
 {
     for (size_t i = 0; i < animations.size();)
@@ -41,6 +50,8 @@ void updateAnimations()
     }
 }
 
+// To avoid having to deal with any kind of synchronization, we fill a separate SSBO
+// with data for each swapchain image. It is far from being a silver bullet, but simpler:
 void fillQuadsBuffer(VulkanRenderDevice &vkDev, VulkanQuadRenderer &quadRenderer, size_t currentImage)
 {
     const float aspect = (float)vkDev.framebufferWidth / (float)vkDev.framebufferHeight;
@@ -81,6 +92,7 @@ bool initVulkan()
                                                    kScreenHeight, isDeviceSuitable, deviceFeatures2))
         exit(EXIT_FAILURE);
 
+    // Each explosion is stored as a separate flipbook and contains 100 frames defined as kNumFlipbookFrames
     std::vector<std::string> textureFiles;
     for (uint32_t j = 0; j < 3; j++)
     {
@@ -147,7 +159,7 @@ int main()
 			{
 				const float mx = (mouseX / (float)vkDev.framebufferWidth ) * 2.0f - 1.0f;
 				const float my = (mouseY / (float)vkDev.framebufferHeight) * 2.0f - 1.0f;
-
+                // The flipbook starting offset is selected randomly for each explosion
 				animations.push_back(AnimationState{
 					.position = vec2(mx, my),
 					.startTime = glfwGetTime(),

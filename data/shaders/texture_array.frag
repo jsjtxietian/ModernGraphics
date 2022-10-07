@@ -11,5 +11,6 @@ layout (location = 0) out vec4 outFragColor;
 
 void main() 
 {
+	// The nonuniformEXT type qualifier can be used to assert that a variable or expression is not dynamically uniform
 	outFragColor = texture(textures[nonuniformEXT(in_texIndex)], in_uv);
 }
