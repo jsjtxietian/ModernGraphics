@@ -16,3 +16,6 @@
 * vulkan v1.2.178
 * tinyobject loader for vulkan_mini_example
 * Amazon Lumberyard Bistro from http://casual-effects.com/data/index.html
+
+## art sources and data
+* https://blogs.unity3d.com/2016/11/28/free-vfx-image-sequences-flipbooks

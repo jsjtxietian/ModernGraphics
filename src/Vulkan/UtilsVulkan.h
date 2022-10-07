@@ -145,6 +145,7 @@ VkResult createSemaphore(VkDevice device, VkSemaphore *outSemaphore);
 
 bool initVulkanRenderDevice(VulkanInstance &vk, VulkanRenderDevice &vkDev, uint32_t width, uint32_t height, std::function<bool(VkPhysicalDevice)> selector, VkPhysicalDeviceFeatures deviceFeatures);
 bool initVulkanRenderDeviceWithCompute(VulkanInstance &vk, VulkanRenderDevice &vkDev, uint32_t width, uint32_t height, VkPhysicalDeviceFeatures deviceFeatures);
+bool initVulkanRenderDeviceWithDescriptorIndex(VulkanInstance &vk, VulkanRenderDevice &vkDev, uint32_t width, uint32_t height, std::function<bool(VkPhysicalDevice)> selector, VkPhysicalDeviceFeatures2 deviceFeatures2);
 void destroyVulkanRenderDevice(VulkanRenderDevice &vkDev);
 void destroyVulkanInstance(VulkanInstance &vk);
 

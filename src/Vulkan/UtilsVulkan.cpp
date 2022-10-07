@@ -642,6 +642,90 @@ bool initVulkanRenderDeviceWithCompute(VulkanInstance &vk, VulkanRenderDevice &v
 	return true;
 }
 
+VkResult createDeviceWithDescriptorIndex(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2 deviceFeatures2,
+										 uint32_t graphicsFamily, VkDevice *device)
+{
+	const std::vector<const char *> extensions =
+		{
+			VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+			VK_KHR_MAINTENANCE3_EXTENSION_NAME,
+			VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
+			// for legacy drivers Vulkan 1.1
+			VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME};
+
+	const float queuePriority = 1.0f;
+
+	const VkDeviceQueueCreateInfo qci =
+		{
+			.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+			.pNext = nullptr,
+			.flags = 0,
+			.queueFamilyIndex = graphicsFamily,
+			.queueCount = 1,
+			.pQueuePriorities = &queuePriority};
+
+	const VkDeviceCreateInfo ci =
+		{
+			.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+			.pNext = &deviceFeatures2,
+			.flags = 0,
+			.queueCreateInfoCount = 1,
+			.pQueueCreateInfos = &qci,
+			.enabledLayerCount = 0,
+			.ppEnabledLayerNames = nullptr,
+			.enabledExtensionCount = static_cast<uint32_t>(extensions.size()),
+			.ppEnabledExtensionNames = extensions.data(),
+			.pEnabledFeatures = nullptr};
+
+	return vkCreateDevice(physicalDevice, &ci, nullptr, device);
+}
+
+bool initVulkanRenderDeviceWithDescriptorIndex(VulkanInstance &vk, VulkanRenderDevice &vkDev, uint32_t width, uint32_t height, std::function<bool(VkPhysicalDevice)> selector, VkPhysicalDeviceFeatures2 deviceFeatures2)
+{
+	vkDev.framebufferWidth = width;
+	vkDev.framebufferHeight = height;
+
+	VK_CHECK(findSuitablePhysicalDevice(vk.instance, selector, &vkDev.physicalDevice));
+	vkDev.graphicsFamily = findQueueFamilies(vkDev.physicalDevice, VK_QUEUE_GRAPHICS_BIT);
+	VK_CHECK(createDeviceWithDescriptorIndex(vkDev.physicalDevice, deviceFeatures2, vkDev.graphicsFamily, &vkDev.device));
+
+	vkGetDeviceQueue(vkDev.device, vkDev.graphicsFamily, 0, &vkDev.graphicsQueue);
+	if (vkDev.graphicsQueue == nullptr)
+		exit(EXIT_FAILURE);
+
+	VkBool32 presentSupported = 0;
+	vkGetPhysicalDeviceSurfaceSupportKHR(vkDev.physicalDevice, vkDev.graphicsFamily, vk.surface, &presentSupported);
+	if (!presentSupported)
+		exit(EXIT_FAILURE);
+
+	VK_CHECK(createSwapchain(vkDev.device, vkDev.physicalDevice, vk.surface, vkDev.graphicsFamily, width, height, &vkDev.swapchain));
+	const size_t imageCount = createSwapchainImages(vkDev.device, vkDev.swapchain, vkDev.swapchainImages, vkDev.swapchainImageViews);
+	vkDev.commandBuffers.resize(imageCount);
+
+	VK_CHECK(createSemaphore(vkDev.device, &vkDev.semaphore));
+	VK_CHECK(createSemaphore(vkDev.device, &vkDev.renderSemaphore));
+
+	const VkCommandPoolCreateInfo cpi =
+		{
+			.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+			.flags = 0,
+			.queueFamilyIndex = vkDev.graphicsFamily};
+
+	VK_CHECK(vkCreateCommandPool(vkDev.device, &cpi, nullptr, &vkDev.commandPool));
+
+	const VkCommandBufferAllocateInfo ai =
+		{
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+			.pNext = nullptr,
+			.commandPool = vkDev.commandPool,
+			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+			.commandBufferCount = static_cast<uint32_t>(vkDev.swapchainImages.size()),
+		};
+
+	VK_CHECK(vkAllocateCommandBuffers(vkDev.device, &ai, &vkDev.commandBuffers[0]));
+	return true;
+}
+
 void destroyVulkanRenderDevice(VulkanRenderDevice &vkDev)
 {
 	for (size_t i = 0; i < vkDev.swapchainImages.size(); i++)

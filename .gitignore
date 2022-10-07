@@ -4,3 +4,6 @@ imgui.ini
 data/shaders/*.spv
 data/bistro
 data/meshes
+data/explosion0
+data/explosion1
+data/explosion2

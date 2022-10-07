@@ -174,7 +174,10 @@ VulkanQuadRenderer::VulkanQuadRenderer(VulkanRenderDevice &vkDev, const std::vec
 		!createDescriptorSet(vkDev) ||
 		!createColorAndDepthRenderPass(vkDev, false, &renderPass_, RenderPassCreateInfo()) ||
 		!createPipelineLayoutWithConstants(vkDev.device, descriptorSetLayout_, &pipelineLayout_, sizeof(ConstBuffer), 0) ||
-		!createGraphicsPipeline(vkDev, renderPass_, pipelineLayout_, {"data/shaders/chapter06/VK02_texture_array.vert", "data/shaders/chapter06/VK02_texture_array.frag"}, &graphicsPipeline_))
+		!createGraphicsPipeline(vkDev, renderPass_, pipelineLayout_,
+								{"data/shaders/texture_array.vert",
+								 "data/shaders/texture_array.frag"},
+								&graphicsPipeline_))
 	{
 		printf("Failed to create pipeline\n");
 		fflush(stdout);
