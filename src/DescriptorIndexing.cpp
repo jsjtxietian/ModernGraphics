@@ -1,5 +1,7 @@
 // Multiple explosions, each using a different flipbook, can be rendered simultaneously
-
+// While this example passes a texture index into a shader as a push constant, making it
+// uniform, with the GL_EXT_nonuniform_qualifier extension it is possible to store
+// texture indices inside Vulkan buffers in a completely dynamic way.
 #include "Vulkan/VulkanApp.h"
 #include "Vulkan/VulkanClear.h"
 #include "Vulkan/VulkanFinish.h"

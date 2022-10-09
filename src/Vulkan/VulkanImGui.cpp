@@ -70,11 +70,14 @@ bool ImGuiRenderer::createDescriptorSet(VulkanRenderDevice &vkDev)
 
 bool ImGuiRenderer::createMultiDescriptorSet(VulkanRenderDevice &vkDev)
 {
+    // we might have more than one texture, so we specify this explicitly by asking for the
+    // extTextures_ array size
     const std::array<VkDescriptorSetLayoutBinding, 4> bindings = {
         descriptorSetLayoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT),
         descriptorSetLayoutBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT),
         descriptorSetLayoutBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT),
-        descriptorSetLayoutBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, static_cast<uint32_t>(1 + extTextures_.size()))};
+        descriptorSetLayoutBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT,
+                                   static_cast<uint32_t>(1 + extTextures_.size()))};
 
     const VkDescriptorSetLayoutCreateInfo layoutInfo = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
@@ -85,6 +88,7 @@ bool ImGuiRenderer::createMultiDescriptorSet(VulkanRenderDevice &vkDev)
 
     VK_CHECK(vkCreateDescriptorSetLayout(vkDev.device, &layoutInfo, nullptr, &descriptorSetLayout_));
 
+    // we allocate descriptor sets for each of the swapchain images:
     std::vector<VkDescriptorSetLayout> layouts(vkDev.swapchainImages.size(), descriptorSetLayout_);
 
     const VkDescriptorSetAllocateInfo allocInfo = {
@@ -99,6 +103,7 @@ bool ImGuiRenderer::createMultiDescriptorSet(VulkanRenderDevice &vkDev)
     VK_CHECK(vkAllocateDescriptorSets(vkDev.device, &allocInfo, descriptorSets_.data()));
 
     // use the font texture initialized in the constructor
+    // create image information structures for all of the used textures.
     std::vector<VkDescriptorImageInfo> textureDescriptors = {
         {fontSampler_, font_.imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}};
 
@@ -107,10 +112,13 @@ bool ImGuiRenderer::createMultiDescriptorSet(VulkanRenderDevice &vkDev)
         textureDescriptors.push_back({
             .sampler = extTextures_[i].sampler,
             .imageView = extTextures_[i].image.imageView,
-            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL /// TODO: select type from VulkanTexture object (GENERAL or SHADER_READ_ONLY_OPTIMAL)
+            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+            /// TODO: select type from VulkanTexture object (GENERAL or SHADER_READ_ONLY_OPTIMAL)
+            // assume all of our textures are in the shader-optimal layou
         });
     }
 
+    // proceed to updating each of the created descriptor sets:
     for (size_t i = 0; i < vkDev.swapchainImages.size(); i++)
     {
         VkDescriptorSet ds = descriptorSets_[i];
@@ -122,6 +130,8 @@ bool ImGuiRenderer::createMultiDescriptorSet(VulkanRenderDevice &vkDev)
             bufferWriteDescriptorSet(ds, &bufferInfo, 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER),
             bufferWriteDescriptorSet(ds, &bufferInfo2, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
             bufferWriteDescriptorSet(ds, &bufferInfo3, 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
+            // tate that this binding is indexed and refers to an array of texture handles in the
+            // textureDescriptors variable
             VkWriteDescriptorSet{
                 .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                 .dstSet = descriptorSets_[i],
@@ -165,7 +175,9 @@ void addImGuiItem(uint32_t width, uint32_t height, VkCommandBuffer commandBuffer
             .extent = {.width = (uint32_t)(clipRect.z - clipRect.x), .height = (uint32_t)(clipRect.w - clipRect.y)}};
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-        // this is added in the Chapter 6: Using descriptor indexing in Vulkan to render an ImGui UI
+        // If our external textures array is
+        // not empty, we extract the texture ID and pass it to our fragment shader using the
+        // push constants mechanism
         if (textures.size() > 0)
         {
             uint32_t texture = (uint32_t)(intptr_t)pcmd->TextureId;
@@ -344,7 +356,8 @@ ImGuiRenderer::ImGuiRenderer(VulkanRenderDevice &vkDev, const std::vector<Vulkan
     ImGuiIO &io = ImGui::GetIO();
     createFontTexture(io, "data/OpenSans-Light.ttf", vkDev, font_.image, font_.imageMemory);
 
-    createImageView(vkDev.device, font_.image, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, &font_.imageView);
+    createImageView(vkDev.device, font_.image, VK_FORMAT_R8G8B8A8_UNORM,
+                    VK_IMAGE_ASPECT_COLOR_BIT, &font_.imageView);
     createTextureSampler(vkDev.device, &fontSampler_);
 
     // Buffer allocation
@@ -368,6 +381,9 @@ ImGuiRenderer::ImGuiRenderer(VulkanRenderDevice &vkDev, const std::vector<Vulkan
     }
 
     // Pipeline creation
+    // The descriptor pool now has to accommodate the font and all the external textures
+    // The pipeline  must allow a single push constant that
+    // we use to pass the texture index of a rendered element:
     if (!createColorAndDepthRenderPass(vkDev, false, &renderPass_, RenderPassCreateInfo()) ||
         !createColorAndDepthFramebuffers(vkDev, renderPass_, VK_NULL_HANDLE, swapchainFramebuffers_) ||
         !createUniformBuffers(vkDev, sizeof(mat4)) ||
@@ -376,7 +392,7 @@ ImGuiRenderer::ImGuiRenderer(VulkanRenderDevice &vkDev, const std::vector<Vulkan
         !createPipelineLayoutWithConstants(vkDev.device, descriptorSetLayout_, &pipelineLayout_, 0, sizeof(uint32_t)) ||
         !createGraphicsPipeline(vkDev, renderPass_, pipelineLayout_,
                                 {"data/shaders/imgui.vert",
-                                 "data/shaders/imgui_multi.frag"},
+                                 "data/shaders/imgui_multi.frag"}, // ?
                                 &graphicsPipeline_, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
                                 true, true, true))
     {

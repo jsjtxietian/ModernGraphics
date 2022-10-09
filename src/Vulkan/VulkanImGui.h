@@ -21,6 +21,7 @@ private:
     /* Descriptor set with multiple textures (for offscreen buffer display etc.) */
     bool createMultiDescriptorSet(VulkanRenderDevice &vkDev);
 
+    // a list of used external textures
     std::vector<VulkanTexture> extTextures_;
 
     // storage buffer with index and vertex data
