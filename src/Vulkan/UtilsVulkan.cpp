@@ -1330,6 +1330,14 @@ void uploadBufferData(VulkanRenderDevice &vkDev, const VkDeviceMemory &bufferMem
 	vkUnmapMemory(vkDev.device, bufferMemory);
 }
 
+void downloadBufferData(VulkanRenderDevice &vkDev, const VkDeviceMemory &bufferMemory, VkDeviceSize deviceOffset, void *outData, const size_t dataSize)
+{
+	void *mappedData = nullptr;
+	vkMapMemory(vkDev.device, bufferMemory, deviceOffset, dataSize, 0, &mappedData);
+	memcpy(outData, mappedData, dataSize);
+	vkUnmapMemory(vkDev.device, bufferMemory);
+}
+
 bool createColorAndDepthFramebuffers(VulkanRenderDevice &vkDev, VkRenderPass renderPass,
 									 VkImageView depthImageView, std::vector<VkFramebuffer> &swapchainFramebuffers)
 {
@@ -1826,6 +1834,69 @@ bool createColorAndDepthRenderPass(VulkanRenderDevice &vkDev, bool useDepth,
 		.pDependencies = dependencies.data()};
 
 	return (vkCreateRenderPass(vkDev.device, &renderPassInfo, nullptr, renderPass) == VK_SUCCESS);
+}
+
+// ensures the compute shader finishes before texture sampling happens
+void insertComputedImageBarrier(VkCommandBuffer commandBuffer, VkImage image)
+{
+	// make sure compute shader finishes before sampling
+	const VkImageMemoryBarrier barrier = {
+		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+		.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+		.dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+		.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+		.newLayout = VK_IMAGE_LAYOUT_GENERAL,
+		.image = image,
+		.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+
+	vkCmdPipelineBarrier(commandBuffer,
+						 VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+						 VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+						 0 /*VK_FLAGS_NONE*/, 0, nullptr, 0, nullptr, 1, &barrier);
+}
+
+void copyImageToBuffer(VulkanRenderDevice &vkDev, VkImage image, VkBuffer buffer, uint32_t width, uint32_t height, uint32_t layerCount)
+{
+	VkCommandBuffer commandBuffer = beginSingleTimeCommands(vkDev);
+
+	const VkBufferImageCopy region = {
+		.bufferOffset = 0,
+		.bufferRowLength = 0,
+		.bufferImageHeight = 0,
+		.imageSubresource = VkImageSubresourceLayers{
+			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+			.mipLevel = 0,
+			.baseArrayLayer = 0,
+			.layerCount = layerCount},
+		.imageOffset = VkOffset3D{.x = 0, .y = 0, .z = 0},
+		.imageExtent = VkExtent3D{.width = width, .height = height, .depth = 1}};
+
+	vkCmdCopyImageToBuffer(commandBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, buffer, 1, &region);
+
+	endSingleTimeCommands(vkDev, commandBuffer);
+}
+
+bool downloadImageData(VulkanRenderDevice &vkDev, VkImage &textureImage, uint32_t texWidth, uint32_t texHeight, VkFormat texFormat, uint32_t layerCount, void *imageData, VkImageLayout sourceImageLayout)
+{
+	uint32_t bytesPerPixel = bytesPerTexFormat(texFormat);
+
+	VkDeviceSize layerSize = texWidth * texHeight * bytesPerPixel;
+	VkDeviceSize imageSize = layerSize * layerCount;
+
+	VkBuffer stagingBuffer;
+	VkDeviceMemory stagingBufferMemory;
+	createBuffer(vkDev.device, vkDev.physicalDevice, imageSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+
+	transitionImageLayout(vkDev, textureImage, texFormat, sourceImageLayout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, layerCount);
+	copyImageToBuffer(vkDev, textureImage, stagingBuffer, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight), layerCount);
+	transitionImageLayout(vkDev, textureImage, texFormat, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, sourceImageLayout, layerCount);
+
+	downloadBufferData(vkDev, stagingBufferMemory, 0, imageData, imageSize);
+
+	vkDestroyBuffer(vkDev.device, stagingBuffer, nullptr);
+	vkFreeMemory(vkDev.device, stagingBufferMemory, nullptr);
+
+	return true;
 }
 
 VkResult createComputePipeline(VkDevice device, VkShaderModule computeShader,

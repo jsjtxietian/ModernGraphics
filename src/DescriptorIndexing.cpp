@@ -1,3 +1,4 @@
+#if 0
 // Multiple explosions, each using a different flipbook, can be rendered simultaneously
 // While this example passes a texture index into a shader as a push constant, making it
 // uniform, with the GL_EXT_nonuniform_qualifier extension it is possible to store
@@ -197,3 +198,4 @@ int main()
 
     return 0;
 }
+#endif

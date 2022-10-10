@@ -74,6 +74,15 @@ struct VulkanImage final
 	VkImageView imageView = nullptr;
 };
 
+struct VulkanBuffer
+{
+	VkBuffer buffer;
+	VkDeviceSize size;
+	VkDeviceMemory memory;
+
+	/* Permanent mapping to CPU address space (see VulkanResources::addBuffer) */
+	void *ptr;
+};
 struct SwapchainSupportDetails final
 {
 	VkSurfaceCapabilitiesKHR capabilities = {};
@@ -158,6 +167,8 @@ bool createUniformBuffer(VulkanRenderDevice &vkDev, VkBuffer &buffer,
 						 VkDeviceMemory &bufferMemory, VkDeviceSize bufferSize);
 /** Copy [data] to GPU device buffer */
 void uploadBufferData(VulkanRenderDevice &vkDev, const VkDeviceMemory &bufferMemory, VkDeviceSize deviceOffset, const void *data, const size_t dataSize);
+/** Copy GPU device buffer data to [outData] */
+void downloadBufferData(VulkanRenderDevice &vkDev, const VkDeviceMemory &bufferMemory, VkDeviceSize deviceOffset, void *outData, size_t dataSize);
 
 bool createImage(VkDevice device, VkPhysicalDevice physicalDevice, uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage &image, VkDeviceMemory &imageMemory, VkImageCreateFlags flags = 0, uint32_t mipLevels = 1);
 bool createTextureImage(VulkanRenderDevice &vkDev, const char *filename, VkImage &textureImage, VkDeviceMemory &textureImageMemory, uint32_t *outTexWidth = nullptr, uint32_t *outTexHeight = nullptr);
@@ -197,6 +208,10 @@ bool createGraphicsPipeline(
 	int32_t customHeight = -1,
 	uint32_t numPatchControlPoints = 0);
 
+void copyImageToBuffer(VulkanRenderDevice &vkDev, VkImage image, VkBuffer buffer, uint32_t width, uint32_t height, uint32_t layerCount = 1);
+void insertComputedImageBarrier(VkCommandBuffer commandBuffer, VkImage image);
+bool downloadImageData(VulkanRenderDevice &vkDev, VkImage &textureImage,
+					   uint32_t texWidth, uint32_t texHeight, VkFormat texFormat, uint32_t layerCount, void *imageData, VkImageLayout sourceImageLayout);
 VkResult createComputePipeline(VkDevice device, VkShaderModule computeShader, VkPipelineLayout pipelineLayout, VkPipeline *pipeline);
 bool executeComputeShader(VulkanRenderDevice &vkDev,
 						  VkPipeline computePipeline, VkPipelineLayout pl, VkDescriptorSet ds,
