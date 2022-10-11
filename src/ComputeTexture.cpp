@@ -1,3 +1,5 @@
+#if 0
+
 #include "Vulkan/VulkanApp.h"
 #include "Vulkan/SingleQuad.h"
 #include "Vulkan/ComputedImage.h"
@@ -89,3 +91,5 @@ int main()
 
     return 0;
 }
+
+#endif
