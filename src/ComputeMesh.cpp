@@ -1,3 +1,5 @@
+#if 0
+
 // run a compute shader to create triangulated geometry of a
 // three-dimensional (3D) torus knot shape with different P and Q parameters.
 
@@ -371,3 +373,5 @@ int main()
 
     return 0;
 }
+
+#endif

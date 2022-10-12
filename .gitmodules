@@ -40,3 +40,6 @@
 [submodule "3rdparty/tinyobjloader"]
 	path = 3rdparty/tinyobjloader
 	url = https://github.com/tinyobjloader/tinyobjloader
+[submodule "3rdparty/gli"]
+	path = 3rdparty/gli
+	url = https://github.com/g-truc/gli

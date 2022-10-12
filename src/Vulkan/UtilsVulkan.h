@@ -217,6 +217,7 @@ VkResult createComputePipeline(VkDevice device, VkShaderModule computeShader, Vk
 bool executeComputeShader(VulkanRenderDevice &vkDev,
 						  VkPipeline computePipeline, VkPipelineLayout pl, VkDescriptorSet ds,
 						  uint32_t xsize, uint32_t ysize, uint32_t zsize);
+bool createComputeDescriptorSetLayout(VkDevice device, VkDescriptorSetLayout *descriptorSetLayout);
 
 uint32_t bytesPerTexFormat(VkFormat fmt);
 bool hasStencilComponent(VkFormat format);

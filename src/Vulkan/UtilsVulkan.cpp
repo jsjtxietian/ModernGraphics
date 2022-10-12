@@ -1967,6 +1967,20 @@ bool executeComputeShader(VulkanRenderDevice &vkDev,
 	return true;
 }
 
+/* Default DS layout for In/Out buffer pair */
+bool createComputeDescriptorSetLayout(VkDevice device, VkDescriptorSetLayout *descriptorSetLayout)
+{
+	VkDescriptorSetLayoutBinding descriptorSetLayoutBindings[2] = {
+		{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, 0},
+		{1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, 0}};
+
+	VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo = {
+		VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+		0, 0, 2, descriptorSetLayoutBindings};
+
+	return (vkCreateDescriptorSetLayout(device, &descriptorSetLayoutCreateInfo, 0, descriptorSetLayout) == VK_SUCCESS);
+}
+
 bool createGraphicsPipeline(
 	VulkanRenderDevice &vkDev,
 	VkRenderPass renderPass, VkPipelineLayout pipelineLayout,
