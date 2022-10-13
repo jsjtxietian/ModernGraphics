@@ -2192,3 +2192,205 @@ bool createCubeTextureImage(VulkanRenderDevice &vkDev, const char *filename, VkI
 									  VK_FORMAT_R32G32B32A32_SFLOAT,
 									  6, VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT);
 }
+
+bool createMIPCubeTextureImage(VulkanRenderDevice &vkDev, const char *filename, uint32_t mipLevels, VkImage &textureImage, VkDeviceMemory &textureImageMemory, uint32_t *width, uint32_t *height)
+{
+	int comp;
+	int texWidth, texHeight;
+	const float *img = stbi_loadf(filename, &texWidth, &texHeight, &comp, 3);
+
+	if (!img)
+	{
+		printf("Failed to load [%s] texture\n", filename);
+		fflush(stdout);
+		return false;
+	}
+
+	uint32_t imageSize = texWidth * texHeight * 4;
+	uint32_t mipSize = imageSize * 6;
+
+	uint32_t w = texWidth, h = texHeight;
+	for (uint32_t i = 1; i < mipLevels; i++)
+	{
+		imageSize = w * h * 4;
+		w >>= 1;
+		h >>= 1;
+		mipSize += imageSize;
+	}
+
+	std::vector<float> mipData(mipSize);
+	float *src = mipData.data();
+	float *dst = mipData.data();
+
+	w = texWidth;
+	h = texHeight;
+	float24to32(w, h, img, dst);
+
+	for (uint32_t i = 1; i < mipLevels; i++)
+	{
+		imageSize = w * h * 4;
+		dst += w * h * 4;
+		stbir_resize_float_generic(
+			src, w, h, 0, dst, w / 2, h / 2, 0, 4,
+			STBIR_ALPHA_CHANNEL_NONE, 0, STBIR_EDGE_CLAMP, STBIR_FILTER_CUBICBSPLINE, STBIR_COLORSPACE_LINEAR, nullptr);
+
+		w >>= 1;
+		h >>= 1;
+		src = dst;
+	}
+
+	src = mipData.data();
+	dst = mipData.data();
+
+	std::vector<float> mipCube(mipSize * 6);
+	float *mip = mipCube.data();
+
+	w = texWidth;
+	h = texHeight;
+	uint32_t faceSize = w / 4;
+	for (uint32_t i = 0; i < mipLevels; i++)
+	{
+		Bitmap in(w, h, 4, eBitmapFormat_Float, src);
+		Bitmap out = convertEquirectangularMapToVerticalCross(in);
+		Bitmap cube = convertVerticalCrossToCubeMapFaces(out);
+
+		imageSize = faceSize * faceSize * 4;
+
+		memcpy(mip, cube.data_.data(), 6 * imageSize * sizeof(float));
+		mip += imageSize * 6;
+
+		src += w * h * 4;
+		w >>= 1;
+		h >>= 1;
+	}
+
+	stbi_image_free((void *)img);
+
+	if (width && height)
+	{
+		*width = texWidth;
+		*height = texHeight;
+	}
+
+	return createMIPTextureImageFromData(vkDev,
+										 textureImage, textureImageMemory,
+										 mipCube.data(), mipLevels, faceSize, faceSize,
+										 VK_FORMAT_R32G32B32A32_SFLOAT,
+										 6, VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT);
+}
+
+bool createMIPTextureImageFromData(VulkanRenderDevice &vkDev,
+								   VkImage &textureImage, VkDeviceMemory &textureImageMemory,
+								   void *mipData, uint32_t mipLevels, uint32_t texWidth, uint32_t texHeight,
+								   VkFormat texFormat,
+								   uint32_t layerCount, VkImageCreateFlags flags)
+{
+	createImage(vkDev.device, vkDev.physicalDevice, texWidth, texHeight, texFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage, textureImageMemory, flags, mipLevels);
+
+	// now allocate staging buffer for all MIP levels
+	uint32_t bytesPerPixel = bytesPerTexFormat(texFormat);
+
+	VkDeviceSize layerSize = texWidth * texHeight * bytesPerPixel;
+	VkDeviceSize imageSize = layerSize * layerCount;
+
+	uint32_t w = texWidth, h = texHeight;
+	for (uint32_t i = 1; i < mipLevels; i++)
+	{
+		w >>= 1;
+		h >>= 1;
+		imageSize += w * h * bytesPerPixel * layerCount;
+	}
+
+	VkBuffer stagingBuffer;
+	VkDeviceMemory stagingBufferMemory;
+	createBuffer(vkDev.device, vkDev.physicalDevice, imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+
+	uploadBufferData(vkDev, stagingBufferMemory, 0, mipData, imageSize);
+
+	transitionImageLayout(vkDev, textureImage, texFormat, VK_IMAGE_LAYOUT_UNDEFINED /*sourceImageLayout*/, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, layerCount, mipLevels);
+	copyMIPBufferToImage(vkDev, stagingBuffer, textureImage, mipLevels, texWidth, texHeight, bytesPerPixel, layerCount);
+	transitionImageLayout(vkDev, textureImage, texFormat, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, layerCount, mipLevels);
+
+	vkDestroyBuffer(vkDev.device, stagingBuffer, nullptr);
+	vkFreeMemory(vkDev.device, stagingBufferMemory, nullptr);
+
+	return true;
+}
+
+void copyMIPBufferToImage(VulkanRenderDevice &vkDev, VkBuffer buffer, VkImage image, uint32_t mipLevels, uint32_t width, uint32_t height, uint32_t bytesPP, uint32_t layerCount)
+{
+	VkCommandBuffer commandBuffer = beginSingleTimeCommands(vkDev);
+
+	uint32_t w = width, h = height;
+	uint32_t offset = 0;
+	std::vector<VkBufferImageCopy> regions(mipLevels);
+
+	for (uint32_t i = 0; i < mipLevels; i++)
+	{
+		const VkBufferImageCopy region = {
+			.bufferOffset = offset,
+			.bufferRowLength = 0,
+			.bufferImageHeight = 0,
+			.imageSubresource = VkImageSubresourceLayers{
+				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+				.mipLevel = i,
+				.baseArrayLayer = 0,
+				.layerCount = layerCount},
+			.imageOffset = VkOffset3D{.x = 0, .y = 0, .z = 0},
+			.imageExtent = VkExtent3D{.width = w, .height = h, .depth = 1}};
+
+		offset += w * h * layerCount * bytesPP;
+
+		regions[i] = region;
+
+		w >>= 1;
+		h >>= 1;
+	}
+
+	vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, (uint32_t)regions.size(), regions.data());
+
+	endSingleTimeCommands(vkDev, commandBuffer);
+}
+
+bool createPBRVertexBuffer(VulkanRenderDevice &vkDev, const char *filename, VkBuffer *storageBuffer, VkDeviceMemory *storageBufferMemory, size_t *vertexBufferSize, size_t *indexBufferSize)
+{
+	const aiScene *scene = aiImportFile(filename, aiProcess_Triangulate);
+
+	if (!scene || !scene->HasMeshes())
+	{
+		printf("Unable to load %s\n", filename);
+		exit(255);
+	}
+
+	const aiMesh *mesh = scene->mMeshes[0];
+	struct VertexData
+	{
+		vec4 pos;
+		vec4 n;
+		vec4 tc;
+	};
+
+	std::vector<VertexData> vertices;
+	for (unsigned i = 0; i != mesh->mNumVertices; i++)
+	{
+		const aiVector3D v = mesh->mVertices[i];
+		const aiVector3D t = mesh->mTextureCoords[0][i];
+		const aiVector3D n = mesh->mNormals[i];
+		vertices.push_back({.pos = vec4(v.x, v.y, v.z, 1.0f), .n = vec4(n.x, n.y, n.z, 0.0f), .tc = vec4(t.x, 1.0f - t.y, 0.0f, 0.0f)});
+	}
+
+	std::vector<unsigned int> indices;
+	for (unsigned i = 0; i != mesh->mNumFaces; i++)
+	{
+		for (unsigned j = 0; j != 3; j++)
+			indices.push_back(mesh->mFaces[i].mIndices[j]);
+	}
+	aiReleaseImport(scene);
+
+	*vertexBufferSize = sizeof(VertexData) * vertices.size();
+	*indexBufferSize = sizeof(unsigned int) * indices.size();
+
+	allocateVertexBuffer(vkDev, storageBuffer, storageBufferMemory, *vertexBufferSize, vertices.data(), *indexBufferSize, indices.data());
+
+	return true;
+}

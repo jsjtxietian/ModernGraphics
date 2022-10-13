@@ -224,7 +224,18 @@ bool hasStencilComponent(VkFormat format);
 void destroyVulkanImage(VkDevice device, VulkanImage &image);
 
 bool createCubeTextureImage(VulkanRenderDevice &vkDev, const char *filename, VkImage &textureImage, VkDeviceMemory &textureImageMemory, uint32_t *width = nullptr, uint32_t *height = nullptr);
+bool createMIPCubeTextureImage(VulkanRenderDevice &vkDev, const char *filename, uint32_t mipLevels, VkImage &textureImage, VkDeviceMemory &textureImageMemory, uint32_t *width = nullptr, uint32_t *height = nullptr);
+bool createPBRVertexBuffer(VulkanRenderDevice &vkDev, const char *filename, VkBuffer *storageBuffer, VkDeviceMemory *storageBufferMemory, size_t *vertexBufferSize, size_t *indexBufferSize);
 
+void destroyVulkanImage(VkDevice device, VulkanImage &image);
+void destroyVulkanTexture(VkDevice device, VulkanTexture &texture);
+
+bool createMIPTextureImageFromData(VulkanRenderDevice &vkDev,
+								   VkImage &textureImage, VkDeviceMemory &textureImageMemory,
+								   void *mipData, uint32_t mipLevels, uint32_t texWidth, uint32_t texHeight,
+								   VkFormat texFormat,
+								   uint32_t layerCount = 1, VkImageCreateFlags flags = 0);
+void copyMIPBufferToImage(VulkanRenderDevice &vkDev, VkBuffer buffer, VkImage image, uint32_t mipLevels, uint32_t width, uint32_t height, uint32_t bytesPP, uint32_t layerCount = 1);
 inline VkPipelineShaderStageCreateInfo shaderStageInfo(VkShaderStageFlagBits shaderStage, ShaderModule &module, const char *entryPoint)
 {
 	return VkPipelineShaderStageCreateInfo{

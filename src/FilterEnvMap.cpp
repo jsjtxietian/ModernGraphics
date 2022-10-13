@@ -1,3 +1,4 @@
+#if 0
 // for simplicity rather than for speed or precision, so it does not use
 // importance sampling and convolves the input cube map using simple Monte Carlo
 // integration and the Hammersley sequence to generate uniformly distributed 2D points on
@@ -130,3 +131,5 @@ int main()
 
     return 0;
 }
+
+#endif
