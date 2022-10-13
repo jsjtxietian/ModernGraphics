@@ -1,13 +1,17 @@
 // based on https://github.com/SaschaWillems/Vulkan-glTF-PBR/blob/master/data/shaders/genbrdflut.frag
+// Technically, we calculate the integral value over the hemisphere using the Monte Carlo integration procedure
 #version 460
 
+// a single point of the texture is calculated by one GPU worker
 layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 
+// The number of Monte Carlo trials for numeric integration is declared as a constant
 layout (constant_id = 0) const uint NUM_SAMPLES = 1024u;
 
 layout (set = 0, binding = 0) buffer SRC { float data[]; } src;
 layout (set = 0, binding = 1) buffer DST { float data[]; } dst;
 
+// use a fixed width and height for the I/O buffer layouts
 const uint BRDF_W = 256;
 const uint BRDF_H = 256;
 
@@ -24,6 +28,10 @@ float random(vec2 co)
 	return fract(sin(sn) * c);
 }
 
+// To generate random directions in the hemisphere, we use so-called Hammersley
+// points calculated by the following function:
+// The bit-shifting magic for this application and many other applications is
+// thoroughly described in Henry J. Warren's book called Hacker's Delight.
 vec2 hammersley2d(uint i, uint N) 
 {
 	// Radical inverse based on http://holger.dammertz.org/stuff/notes_HammersleyOnHemisphere.html
@@ -36,7 +44,9 @@ vec2 hammersley2d(uint i, uint N)
 	return vec2(float(i) /float(N), rdi);
 }
 
+// Real Shading in Unreal Engine 4 by Brian Karis
 // based on http://blog.selfshadow.com/publications/s2013-shading-course/karis/s2013_pbs_epic_slides.pdf
+// maps a 2D point to a hemisphere with spread based on surface roughness
 vec3 importanceSample_GGX(vec2 Xi, float roughness, vec3 normal) 
 {
 	// Maps a 2D point to a hemisphere with spread based on roughness
@@ -95,12 +105,14 @@ vec2 BRDF(float NoV, float roughness)
 
 void main() 
 {
+	// recalculate the worker ID to output array indices
 	vec2 uv;
 	uv.x = (float(gl_GlobalInvocationID.x) + 0.5) / float(BRDF_W);
 	uv.y = (float(gl_GlobalInvocationID.y) + 0.5) / float(BRDF_H);
 
 	vec2 v = BRDF(uv.x, 1.0 - uv.y);
 
+	//  The calculated value is put into the 2D array
 	uint offset = gl_GlobalInvocationID.y * BRDF_W + gl_GlobalInvocationID.x;
 
 	dst.data[offset * 2 + 0] = v.x;

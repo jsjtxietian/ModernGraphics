@@ -1322,7 +1322,9 @@ bool createUniformBuffer(VulkanRenderDevice &vkDev, VkBuffer &buffer,
 						buffer, bufferMemory);
 }
 
-void uploadBufferData(VulkanRenderDevice &vkDev, const VkDeviceMemory &bufferMemory, VkDeviceSize deviceOffset, const void *data, const size_t dataSize)
+// upload data from the host memory into a GPU buffer
+void uploadBufferData(VulkanRenderDevice &vkDev, const VkDeviceMemory &bufferMemory,
+					  VkDeviceSize deviceOffset, const void *data, const size_t dataSize)
 {
 	void *mappedData = nullptr;
 	vkMapMemory(vkDev.device, bufferMemory, deviceOffset, dataSize, 0, &mappedData);
@@ -1330,6 +1332,9 @@ void uploadBufferData(VulkanRenderDevice &vkDev, const VkDeviceMemory &bufferMem
 	vkUnmapMemory(vkDev.device, bufferMemory);
 }
 
+// read from the mapped memory and store it on our app's heap
+// The downloadBufferData() function should be called only after a
+// corresponding memory barrier was executed in the compute command queue.
 void downloadBufferData(VulkanRenderDevice &vkDev, const VkDeviceMemory &bufferMemory, VkDeviceSize deviceOffset, void *outData, const size_t dataSize)
 {
 	void *mappedData = nullptr;

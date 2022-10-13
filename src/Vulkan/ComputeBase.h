@@ -3,6 +3,7 @@
 #include "Utils/Utils.h"
 #include "Vulkan/UtilsVulkan.h"
 
+// hide mentions of Vulkan devices, pipelines, and descriptor sets
 struct ComputeBase
 {
 	ComputeBase(VulkanRenderDevice &vkDev, const char *shaderName, uint32_t inputSize, uint32_t outputSize);

@@ -1,3 +1,18 @@
+// precompute the Smith GGX BRDF LUT. To render a PBR image,
+// we have to evaluate the BRDF at each point based on surface properties and viewing
+// direction. This is computationally expensive, and many real-time implementations,
+// including the reference glTF-Sample-Viewer implementation from Khronos, use
+// precalculated tables of some sort to find the BRDF value based on surface roughness
+// and viewing direction. A BRDF LUT can be stored as a 2D texture where the x axis
+// corresponds to the dot product between the surface normal vector and the viewing
+// direction, and the y axis corresponds to the 0...1. surface roughness. Each texel stores
+// two 16-bit floating-point values—namely, a scale and bias to F0, which is the specular
+// reflectance at normal incidence.
+
+// check out the Environment BRDF section
+// from the Real Shading in Unreal Engine 4 presentation by Brian Karis
+// at https://cdn2.unrealengine.com/Resources/files/2013SiggraphPresentationsNotes-26915738.pdf.
+
 #include "Vulkan/VulkanApp.h"
 #include "Vulkan/ComputeBase.h"
 

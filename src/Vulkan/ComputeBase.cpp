@@ -1,17 +1,21 @@
 #include "ComputeBase.h"
 
-ComputeBase::ComputeBase(VulkanRenderDevice &vkDev, const char *shaderName, uint32_t inputSize, uint32_t outputSize) : vkDev(vkDev)
+// allocate I/O buffers. Those are shared between the compute and graphics queues
+ComputeBase::ComputeBase(VulkanRenderDevice &vkDev, const char *shaderName, uint32_t inputSize, uint32_t outputSize)
+	: vkDev(vkDev)
 {
 	createSharedBuffer(vkDev, inputSize,
 					   VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 					   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 					   inBuffer, inBufferMemory);
 
+	// allocate both buffers as host-visible. If the output buffer is
+	// needed only for rendering purposes, host visibility and coherence can be disabled:
 	createSharedBuffer(vkDev, outputSize,
 					   VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 					   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 					   outBuffer, outBufferMemory);
-
+	// uses a single compute shader to process the input buffer and write the output buffer
 	ShaderModule s;
 	createShaderModule(vkDev.device, &s, shaderName);
 
@@ -40,7 +44,7 @@ ComputeBase::~ComputeBase()
 
 bool ComputeBase::createComputeDescriptorSet(VkDevice device, VkDescriptorSetLayout descriptorSetLayout)
 {
-	// Descriptor pool
+	// Descriptor pool, only have two buffers 
 	VkDescriptorPoolSize descriptorPoolSize = {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2};
 
 	VkDescriptorPoolCreateInfo descriptorPoolCreateInfo = {
@@ -49,6 +53,7 @@ bool ComputeBase::createComputeDescriptorSet(VkDevice device, VkDescriptorSetLay
 	VK_CHECK(vkCreateDescriptorPool(device, &descriptorPoolCreateInfo, 0, &descriptorPool));
 
 	// Descriptor set
+	// only need one set for the computation
 	VkDescriptorSetAllocateInfo descriptorSetAllocateInfo = {
 		VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
 		0, descriptorPool, 1, &descriptorSetLayout};
@@ -56,6 +61,7 @@ bool ComputeBase::createComputeDescriptorSet(VkDevice device, VkDescriptorSetLay
 	VK_CHECK(vkAllocateDescriptorSets(device, &descriptorSetAllocateInfo, &descriptorSet));
 
 	// Finally, update descriptor set with concrete buffer pointers
+	// The I/O buffer handles are bound to the descriptor set.
 	VkDescriptorBufferInfo inBufferInfo = {inBuffer, 0, VK_WHOLE_SIZE};
 
 	VkDescriptorBufferInfo outBufferInfo = {outBuffer, 0, VK_WHOLE_SIZE};
