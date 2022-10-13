@@ -1,3 +1,5 @@
+#if 0
+
 // precompute the Smith GGX BRDF LUT. To render a PBR image,
 // we have to evaluate the BRDF at each point based on surface properties and viewing
 // direction. This is computationally expensive, and many real-time implementations,
@@ -12,6 +14,10 @@
 // check out the Environment BRDF section
 // from the Real Shading in Unreal Engine 4 presentation by Brian Karis
 // at https://cdn2.unrealengine.com/Resources/files/2013SiggraphPresentationsNotes-26915738.pdf.
+
+// There is an interesting runtime approximation
+// used in Unreal Engine that does not rely on any precomputation, as described in
+// https://www.unrealengine.com/en-US/blog/physically-based-shading-on-mobile. 
 
 #include "Vulkan/VulkanApp.h"
 #include "Vulkan/ComputeBase.h"
@@ -86,3 +92,5 @@ int main()
 
     return 0;
 }
+
+#endif
