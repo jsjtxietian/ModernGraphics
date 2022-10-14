@@ -22,6 +22,7 @@ struct PBRInfo
 
 const float M_PI = 3.141592653589793;
 
+// sRGB-to-linear color space conversion routine, rough approximation, done for simplicity
 vec4 SRGBtoLINEAR(vec4 srgbIn)
 {
 	vec3 linOut = pow(srgbIn.xyz,vec3(2.2));
@@ -46,6 +47,8 @@ vec3 getIBLContribution(PBRInfo pbrInputs, vec3 n, vec3 reflection)
 	vec3 cm = vec3(1.0, 1.0, 1.0);
 #endif
 	// HDR envmaps are already linear
+	// directly add diffuse and specular because our precalculated BRDF LUT
+	// already takes care of energy conservation
 	vec3 diffuseLight = texture(texEnvMapIrradiance, n.xyz * cm).rgb;
 	vec3 specularLight = textureLod(texEnvMap, reflection.xyz * cm, lod).rgb;
 
@@ -96,6 +99,9 @@ float microfacetDistribution(PBRInfo pbrInputs)
 	return roughnessSq / (M_PI * f * f);
 }
 
+// As it is supposed to be in glTF 2.0, roughness is stored in the green channel, while
+// metallic is stored in the blue channel. This layout intentionally reserves the red
+// channel for optional occlusion map data:
 vec3 calculatePBRInputsMetallicRoughness( vec4 albedo, vec3 normal, vec3 cameraPos, vec3 worldPos, vec4 mrSample, out PBRInfo pbrInputs )
 {
 	float perceptualRoughness = 1.0;
@@ -112,6 +118,7 @@ vec3 calculatePBRInputsMetallicRoughness( vec4 albedo, vec3 normal, vec3 cameraP
 	metallic = clamp(metallic, 0.0, 1.0);
 	// Roughness is authored as perceptual roughness; as is convention,
 	// convert to material roughness by squaring the perceptual roughness [2].
+	// The albedo may be defined from a base texture or a flat color.
 	float alphaRoughness = perceptualRoughness * perceptualRoughness;
 
 	// The albedo may be defined from a base texture or a flat color
@@ -151,8 +158,12 @@ vec3 calculatePBRInputsMetallicRoughness( vec4 albedo, vec3 normal, vec3 cameraP
 	return color;
 }
 
+// The lighting contribution from a single light source can be calculated in the following way
+// using the precalculated values from PBRInfo
 vec3 calculatePBRLightContribution( inout PBRInfo pbrInputs, vec3 lightDirection, vec3 lightColor )
 {
+	// l is the vector from the surface point to the light source, and h is the half
+	// vector between l and v
 	vec3 n = pbrInputs.n;
 	vec3 v = pbrInputs.v;
 	vec3 l = normalize(lightDirection);	// Vector from surface point to light

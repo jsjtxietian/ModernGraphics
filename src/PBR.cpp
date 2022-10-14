@@ -1,3 +1,6 @@
+// A lightweight introduction to the glTF 2.0 shading model can be found at 
+// https://github.com/KhronosGroup/glTF-Sample-Viewer/tree/glTF-WebGL-PBR.
+
 #include "Vulkan/VulkanApp.h"
 #include "Vulkan/VulkanClear.h"
 #include "Vulkan/VulkanFinish.h"
@@ -68,6 +71,16 @@ int main()
 {
     window = initVulkanApp(kScreenWidth, kScreenHeight);
 
+    glfwSetCursorPosCallback(
+        window,
+        [](auto *window, double x, double y)
+        {
+            int width, height;
+            glfwGetFramebufferSize(window, &width, &height);
+            mouseState.pos.x = static_cast<float>(x / width);
+            mouseState.pos.y = static_cast<float>(y / height);
+        });
+        
     glfwSetMouseButtonCallback(
         window,
         [](auto *window, int button, int action, int mods)

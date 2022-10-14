@@ -1,4 +1,4 @@
-//
+// uses programmable vertex pulling to read vertex data from the SSBO and passes data further down the graphics pipeline.
 #version 460
 
 layout(location = 0) out vec3 worldPos;
