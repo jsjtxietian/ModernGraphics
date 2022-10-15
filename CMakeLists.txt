@@ -54,6 +54,9 @@ include_directories(3rdparty/stb)
 #imgui
 include_directories(3rdparty/imgui)
 
+#rapidjson
+include_directories(3rdparty/rapidjson/include)
+
 #easy_profiler
 option(BUILD_WITH_EASY_PROFILER "Enable EasyProfiler usage" ON)
 set(EASY_PROFILER_NO_GUI ON CACHE BOOL "")
@@ -189,6 +192,10 @@ include_directories(3rdparty)
 
 add_executable(MeshConverter ${UTIL_SOURCE} ${UTIL_HEAD} ${SCENE_SOURCE} ${SCENE_HEAD} ${CMAKE_CURRENT_SOURCE_DIR}/Tool/MeshConverter.cpp)
 
+project("Scene Converter")
+add_executable(SceneConverter ${UTIL_SOURCE} ${UTIL_HEAD} ${SCENE_SOURCE} ${SCENE_HEAD} ${CMAKE_CURRENT_SOURCE_DIR}/Tool/SceneConverter.cpp)
+
+
 #complier MSVC
 if(MSVC)
     add_compile_options(-W4)
@@ -197,8 +204,10 @@ if(MSVC)
     # add_definitions(-DVULKAN)
     # add_definitions(-DOPENGL)
     set_property(TARGET MeshConverter PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    set_property(TARGET SceneConverter PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 endif()
 
 target_link_libraries(MeshConverter assimp meshoptimizer)
+target_link_libraries(SceneConverter assimp meshoptimizer)
 
 

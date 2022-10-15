@@ -43,3 +43,6 @@
 [submodule "3rdparty/gli"]
 	path = 3rdparty/gli
 	url = https://github.com/g-truc/gli
+[submodule "3rdparty/rapidjson"]
+	path = 3rdparty/rapidjson
+	url = https://github.com/Tencent/rapidjson.git
