@@ -120,13 +120,17 @@ void recalculateGlobalTransforms(Scene &scene)
 
 void loadMap(FILE *f, std::unordered_map<uint32_t, uint32_t> &map)
 {
+    // the count of {key, value} pairs is read from a file
     std::vector<uint32_t> ms;
 
     uint32_t sz = 0;
     fread(&sz, 1, sizeof(sz), f);
 
+    // all the key-value pairs are loaded with a single fread call:
     ms.resize(sz);
     fread(ms.data(), sizeof(int), sz, f);
+
+    // the array is converted into a hash table:
     for (size_t i = 0; i < (sz / 2); i++)
         map[ms[i * 2 + 0]] = ms[i * 2 + 1];
 }
@@ -137,7 +141,7 @@ void loadScene(const char *fileName, Scene &scene)
 
     if (!f)
     {
-        printf("Cannot open scene file '%s'. Please run SceneConverter from Chapter7 and/or MergeMeshes from Chapter 9", fileName);
+        printf("Cannot open scene file '%s'. Please run SceneConverter or MergeMeshes", fileName);
         return;
     }
 
@@ -149,14 +153,18 @@ void loadScene(const char *fileName, Scene &scene)
     scene.localTransform_.resize(sz);
     // TODO: check > -1
     // TODO: recalculate changedAtThisLevel() - find max depth of a node [or save scene.maxLevel]
+    // fread() reads the transformations and hierarchical data for all the scene nodes:
     fread(scene.localTransform_.data(), sizeof(glm::mat4), sz, f);
     fread(scene.globalTransform_.data(), sizeof(glm::mat4), sz, f);
     fread(scene.hierarchy_.data(), sizeof(Hierarchy), sz, f);
 
     // Mesh for node [index to some list of buffers]
+    // Node-to-material and node-to-mesh mappings are loaded with the calls to the
+    // loadMap() helper routine:
     loadMap(f, scene.materialForNode_);
     loadMap(f, scene.meshes_);
 
+    // If there is still some data left, we must read the scene node names and material names:
     if (!feof(f))
     {
         loadMap(f, scene.nameForNode_);
@@ -170,18 +178,25 @@ void loadScene(const char *fileName, Scene &scene)
 
 void saveMap(FILE *f, const std::unordered_map<uint32_t, uint32_t> &map)
 {
+    // A temporary {key, value} pair array is allocated:
     std::vector<uint32_t> ms;
     ms.reserve(map.size() * 2);
+
+    // All the values from std::unordered_map are copied to the array:
     for (const auto &m : map)
     {
         ms.push_back(m.first);
         ms.push_back(m.second);
     }
+
     const uint32_t sz = static_cast<uint32_t>(ms.size());
+    // The count of {key, value} pairs is written to the file:
     fwrite(&sz, sizeof(sz), 1, f);
+    // the {key, value} pairs are written with one fwrite() call:
     fwrite(ms.data(), sizeof(int), ms.size(), f);
 }
 
+// write the count of scene nodes:
 void saveScene(const char *fileName, const Scene &scene)
 {
     FILE *f = fopen(fileName, "wb");
@@ -189,11 +204,13 @@ void saveScene(const char *fileName, const Scene &scene)
     const uint32_t sz = (uint32_t)scene.hierarchy_.size();
     fwrite(&sz, sizeof(sz), 1, f);
 
+    // Three fwrite() calls save the local and global transformations, followed by the hierarchical information
     fwrite(scene.localTransform_.data(), sizeof(glm::mat4), sz, f);
     fwrite(scene.globalTransform_.data(), sizeof(glm::mat4), sz, f);
     fwrite(scene.hierarchy_.data(), sizeof(Hierarchy), sz, f);
 
     // Mesh for node [index to some list of buffers]
+    // store the node-to-materials and node-to-mesh mappings:
     saveMap(f, scene.materialForNode_);
     saveMap(f, scene.meshes_);
 

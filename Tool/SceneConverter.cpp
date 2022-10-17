@@ -679,5 +679,8 @@ int main()
     for (const auto &cfg : configs)
         processScene(cfg);
 
+    // Final step: optimize bistro scene
+	// mergeBistro();
+
     return 0;
 }
