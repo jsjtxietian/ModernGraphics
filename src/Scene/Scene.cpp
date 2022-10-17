@@ -59,6 +59,8 @@ int addNode(Scene &scene, int parent, int level)
     return node;
 }
 
+// starts with a given node and recursively descends
+// to each and every child node, adding it to the changedAtLevel_ arrays
 void markAsChanged(Scene &scene, int node)
 {
     int level = scene.hierarchy_[node].level_;
@@ -97,9 +99,16 @@ int getNodeLevel(const Scene &scene, int n)
 bool mat4IsIdentity(const glm::mat4 &m);
 void fprintfMat4(FILE *f, const glm::mat4 &m);
 
+// Depending on how frequently local transformations are updated, it may be
+// more performant to eliminate the list of recently updated nodes and always
+// perform a full update. Profile your real code
+
 // CPU version of global transform update []
 void recalculateGlobalTransforms(Scene &scene)
 {
+    // start from the root layer of the list of changed scene nodes, supposing we have
+    // only one root node. This is because root node global transforms coincide with their
+    // local transforms. The changed nodes list is then cleared
     if (!scene.changedAtThisFrame_[0].empty())
     {
         int c = scene.changedAtThisFrame_[0][0];
@@ -107,8 +116,12 @@ void recalculateGlobalTransforms(Scene &scene)
         scene.changedAtThisFrame_[0].clear();
     }
 
+    // ensure that we have parents so that the loops are
+    // linear and there are no conditions inside. We will start from level 1 because the root
+    // level is already being handled
     for (int i = 1; i < MAX_NODE_LEVEL && (!scene.changedAtThisFrame_[i].empty()); i++)
     {
+        // iterate all the changed nodes at this level
         for (const int &c : scene.changedAtThisFrame_[i])
         {
             int p = scene.hierarchy_[c].parent_;
