@@ -1,6 +1,7 @@
 #include "Material.h"
 #include "MergeUtil.h"
 
+#include <algorithm>
 #include <map>
 
 static uint32_t shiftMeshIndices(MeshData &meshData, const std::vector<uint32_t> &meshesToMerge)

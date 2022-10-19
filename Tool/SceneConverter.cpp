@@ -2,7 +2,7 @@
 // Our texture conversion code goes through all the textures, downscales them to 512x512
 // where necessary, and saves them in RGBA .png files. In a real-world content pipeline,
 // this conversion process may include a texture compression phase.
-
+    
 #include <algorithm>
 #include <execution>
 #include <fstream>
@@ -24,6 +24,8 @@
 #include "Scene/MergeUtil.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
+#define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_RESIZE_IMPLEMENTATION
 #include "stb_image_write.h"
 #include "stb_image.h"
 #include "stb_image_resize.h"
