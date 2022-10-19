@@ -1,4 +1,7 @@
 // a form of top-down recursive traversal where we create our implicit SceneNode objects in the Scene structure
+// Our texture conversion code goes through all the textures, downscales them to 512x512
+// where necessary, and saves them in RGBA .png files. In a real-world content pipeline,
+// this conversion process may include a texture compression phase.
 
 #include <algorithm>
 #include <execution>
@@ -29,13 +32,14 @@
 
 namespace fs = std::filesystem;
 
+// a global state to simplify our implementation
 MeshData g_MeshData;
-
 uint32_t g_indexOffset = 0;
 uint32_t g_vertexOffset = 0;
 
 const uint32_t g_numElementsToStore = 3 + 3 + 2; // pos(vec3) + normal(vec3) + uv(vec2)
 
+// describing where to load a mesh file from, as well as where to save the converted data
 struct SceneConfig
 {
     std::string fileName;
@@ -652,6 +656,7 @@ std::vector<SceneConfig> readConfigFile(const char *cfgFileName)
     return configList;
 }
 
+// loads a single scene file using Assimp and converts all the data into formats suitable for rendering
 void processScene(const SceneConfig &cfg)
 {
     // clear mesh data from previous scene
@@ -663,10 +668,12 @@ void processScene(const SceneConfig &cfg)
     g_indexOffset = 0;
     g_vertexOffset = 0;
 
-    // extract base model path
+    // To load a mesh using Assimp, we must extract the base path from the filename:
     const std::size_t pathSeparator = cfg.fileName.find_last_of("/\\");
     const std::string basePath = (pathSeparator != std::string::npos) ? cfg.fileName.substr(0, pathSeparator + 1) : std::string();
 
+    // apply most of the optimizations and convert all the polygons into triangles. Normal vectors should
+    // be generated for those meshes that do not contain them.
     const unsigned int flags = 0 |
                                aiProcess_JoinIdenticalVertices |
                                aiProcess_Triangulate |
@@ -689,7 +696,7 @@ void processScene(const SceneConfig &cfg)
         exit(EXIT_FAILURE);
     }
 
-    // 1. Mesh conversion as in Chapter 5
+    // 1. Mesh conversion as in Mesh Converter, convert the Assimp meshes into our representation
     g_MeshData.meshes_.reserve(scene->mNumMeshes);
     g_MeshData.boxes_.reserve(scene->mNumMeshes);
 
@@ -700,6 +707,8 @@ void processScene(const SceneConfig &cfg)
         g_MeshData.meshes_.push_back(mesh);
     }
 
+    // generate a bounding box for each mesh. Bounding boxes will
+    // be used to implement frustum culling
     recalculateBoundingBoxes(g_MeshData);
 
     saveMeshData(cfg.outputMesh.c_str(), g_MeshData);
@@ -707,6 +716,10 @@ void processScene(const SceneConfig &cfg)
     Scene ourScene;
 
     // 2. Material conversion
+    // convert all the Assimp materials that was loaded from file into our runtime material representation,
+    // which is suitable for rendering
+    // All the texture filenames will be saved in the files container.
+    // The opacity maps will be packed into the alpha channels of the corresponding textures
     std::vector<MaterialDescription> materials;
     std::vector<std::string> &materialNames = ourScene.materialNames_;
 
@@ -726,11 +739,14 @@ void processScene(const SceneConfig &cfg)
     }
 
     // 3. Texture processing, rescaling and packing
+    // The textures are converted, rescaled, and packed into the output folder. The
+    // basePath folder's name is needed to extract plain filenames:
     convertAndDownscaleAllTextures(materials, basePath, files, opacityMaps);
 
     saveMaterials(cfg.outputMaterials.c_str(), materials, files);
 
     // 4. Scene hierarchy conversion
+    // the scene is converted into the first-child-next-sibling form and saved:
     traverse(scene, ourScene, scene->mRootNode, -1, 0);
 
     saveScene(cfg.outputScene.c_str(), ourScene);
