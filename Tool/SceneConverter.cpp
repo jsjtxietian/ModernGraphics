@@ -47,12 +47,19 @@ struct SceneConfig
     bool mergeInstances;
 };
 
+// retrieves all the required parameters from the
+// aiMaterial structure and returns a MaterialDescription object that can be used
+// with our GLSL shaders.
 MaterialDescription convertAIMaterialToDescription(const aiMaterial *M, std::vector<std::string> &files, std::vector<std::string> &opacityMaps)
 {
+    // Each texture is addressed by an integer identifier. We will store a list of texture
+    // filenames in the files parameter. The opacityMap parameter contains a list of
+    // textures that need to be combined with transparency maps
     MaterialDescription D;
 
     aiColor4D Color;
 
+    // Assimp API provides getter functions to extract individual color parameters
     if (aiGetMaterialColor(M, AI_MATKEY_COLOR_AMBIENT, &Color) == AI_SUCCESS)
     {
         D.emissiveColor_ = {Color.r, Color.g, Color.b, Color.a};
@@ -65,6 +72,11 @@ MaterialDescription convertAIMaterialToDescription(const aiMaterial *M, std::vec
         if (D.albedoColor_.w > 1.0f)
             D.albedoColor_.w = 1.0f;
     }
+
+    // If aiMaterial contains an emissive color value, we will add it to the
+    // emissiveColor_ property we loaded previously. The per-component color
+    // addition is necessary here because this is the only place where we will use color
+    // addition. Due to this, we did not define the addition operator for gpuvec4:
     if (aiGetMaterialColor(M, AI_MATKEY_COLOR_EMISSIVE, &Color) == AI_SUCCESS)
     {
         D.emissiveColor_.x += Color.r;
@@ -75,9 +87,13 @@ MaterialDescription convertAIMaterialToDescription(const aiMaterial *M, std::vec
             D.albedoColor_.w = 1.0f;
     }
 
+    // The following constant sets the opaqueness threshold value to 5%:
+    // anything with an opaqueness of 95% or more is considered
+    // opaque and avoids any blending.
     const float opaquenessThreshold = 0.05f;
     float Opacity = 1.0f;
 
+    // The material opacity is converted into transparencyFactor and then clamped against the threshold value:
     if (aiGetMaterialFloat(M, AI_MATKEY_OPACITY, &Opacity) == AI_SUCCESS)
     {
         D.transparencyFactor_ = glm::clamp(1.0f - Opacity, 0.0f, 1.0f);
@@ -85,6 +101,8 @@ MaterialDescription convertAIMaterialToDescription(const aiMaterial *M, std::vec
             D.transparencyFactor_ = 0.0f;
     }
 
+    // If the material contains a transparency factor as an RGB value, we use the maximum
+    // component value to calculate our transparency factor.
     if (aiGetMaterialColor(M, AI_MATKEY_COLOR_TRANSPARENT, &Color) == AI_SUCCESS)
     {
         const float Opacity = std::max(std::max(Color.r, Color.g), Color.b);
@@ -94,6 +112,7 @@ MaterialDescription convertAIMaterialToDescription(const aiMaterial *M, std::vec
         D.alphaTest_ = 0.5f;
     }
 
+    // fetch scalar properties of the material
     float tmp = 1.0f;
     if (aiGetMaterialFloat(M, AI_MATKEY_GLTF_PBRMETALLICROUGHNESS_METALLIC_FACTOR, &tmp) == AI_SUCCESS)
         D.metallicFactor_ = tmp;
@@ -101,6 +120,7 @@ MaterialDescription convertAIMaterialToDescription(const aiMaterial *M, std::vec
     if (aiGetMaterialFloat(M, AI_MATKEY_GLTF_PBRMETALLICROUGHNESS_ROUGHNESS_FACTOR, &tmp) == AI_SUCCESS)
         D.roughness_ = {tmp, tmp, tmp, tmp};
 
+    // All the textures for our materials are stored in external files.
     aiString Path;
     aiTextureMapping Mapping;
     unsigned int UVIndex = 0;
@@ -109,11 +129,14 @@ MaterialDescription convertAIMaterialToDescription(const aiMaterial *M, std::vec
     aiTextureMapMode TextureMapMode[2] = {aiTextureMapMode_Wrap, aiTextureMapMode_Wrap};
     unsigned int TextureFlags = 0;
 
+    // The first texture is an emissive map. Use the addUnique() function to add
+    // the texture file to our textures list:
     if (aiGetMaterialTexture(M, aiTextureType_EMISSIVE, 0, &Path, &Mapping, &UVIndex, &Blend, &TextureOp, TextureMapMode, &TextureFlags) == AI_SUCCESS)
     {
         D.emissiveMap_ = addUnique(files, Path.C_Str());
     }
 
+    // The diffuse map is stored as the albedoMap_ field in our material structure
     if (aiGetMaterialTexture(M, aiTextureType_DIFFUSE, 0, &Path, &Mapping, &UVIndex, &Blend, &TextureOp, TextureMapMode, &TextureFlags) == AI_SUCCESS)
     {
         D.albedoMap_ = addUnique(files, Path.C_Str());
@@ -122,6 +145,10 @@ MaterialDescription convertAIMaterialToDescription(const aiMaterial *M, std::vec
             D.flags_ |= sMaterialFlags_Transparent;
     }
 
+    // The normal map can be extracted from either the aiTextureType_NORMALS
+    // property or aiTextureType_HEIGHT in aiMaterial. We must check for the
+    // presence of an aiTextureType_NORMALS texture map and store the texture
+    // index in the normalMap_ field:
     // first try tangent space normal map
     if (aiGetMaterialTexture(M, aiTextureType_NORMALS, 0, &Path, &Mapping, &UVIndex, &Blend, &TextureOp, TextureMapMode, &TextureFlags) == AI_SUCCESS)
     {
@@ -132,12 +159,19 @@ MaterialDescription convertAIMaterialToDescription(const aiMaterial *M, std::vec
         if (aiGetMaterialTexture(M, aiTextureType_HEIGHT, 0, &Path, &Mapping, &UVIndex, &Blend, &TextureOp, TextureMapMode, &TextureFlags) == AI_SUCCESS)
             D.normalMap_ = addUnique(files, Path.C_Str());
 
+    // pack the opacity maps into the alpha channel of our albedo texture
     if (aiGetMaterialTexture(M, aiTextureType_OPACITY, 0, &Path, &Mapping, &UVIndex, &Blend, &TextureOp, TextureMapMode, &TextureFlags) == AI_SUCCESS)
     {
         D.opacityMap_ = addUnique(opacityMaps, Path.C_Str());
         D.alphaTest_ = 0.5f;
     }
 
+    // The final part of the material conversion routine applies some heuristics for guessing
+    // the material's properties, just by looking at the material's name. Here, we are only
+    // checking for glass-like materials in our largest test scene, but some common names,
+    // such as "gold," "silver," and so on can also be used to assign metallic coefficients and
+    // albedo colors. Essentially, this is an easy trick to make our test scene look better. At
+    // the end, the MaterialDescription instance is returned for further processing
     // patch materials
     aiString Name;
     std::string materialName;
@@ -469,20 +503,33 @@ std::string fixTextureFile(const std::string &file)
 
 std::string convertTexture(const std::string &file, const std::string &basePath, std::unordered_map<std::string, uint32_t> &opacityMapIndices, const std::vector<std::string> &opacityMaps)
 {
+    // All our output textures will have no more than 512x512 pixels
     const int maxNewWidth = 512;
     const int maxNewHeight = 512;
 
+    // A temporary dynamic array will contain a combined albedo and opacity map.
+    // To run this on Windows, Linux, and macOS, we should replace all the path separators
+    // with the "/" symbol
     const auto srcFile = replaceAll(basePath + file, "\\", "/");
+    // The new filename is a concatenation of a fixed output directory and a source
+    // filename, with all path separators replaced by double underscores:
     const auto newFile = std::string("data/out_textures/") + lowercaseString(replaceAll(replaceAll(srcFile, "..", "__"), "/", "__") + std::string("__rescaled")) + std::string(".png");
 
     // load this image
+    // We must force the loaded image to be in RGBA format, even if there is
+    // no opacity information. This is a shortcut that we can take here to make our texture
+    // handling code significantly simpler
     int texWidth, texHeight, texChannels;
+    // The fixTextureFile() function fixes situations where 3D model
+    // material data references texture files with inappropriate case in filenames.
     stbi_uc *pixels = stbi_load(fixTextureFile(srcFile).c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
     uint8_t *src = pixels;
     texChannels = STBI_rgb_alpha;
 
     std::vector<uint8_t> tmpImage(maxNewWidth * maxNewHeight * 4);
 
+    // If the texture failed to load, we must set our temporary array as input data to avoid
+    // having to exit here
     if (!src)
     {
         printf("Failed to load [%s] texture\n", srcFile.c_str());
@@ -496,12 +543,17 @@ std::string convertTexture(const std::string &file, const std::string &basePath,
         printf("Loaded [%s] %dx%d texture with %d channels\n", srcFile.c_str(), texWidth, texHeight, texChannels);
     }
 
+    // If this texture has an associated opacity map stored in the hash table, we must load
+    // that opacity map and add its contents to the albedo map. As with the source texture
+    // file, we must replace the path separators for cross-platform operations. The opacity
+    // map is loaded as a simple grayscale image
     if (opacityMapIndices.count(file) > 0)
     {
         const auto opacityMapFile = replaceAll(basePath + opacityMaps[opacityMapIndices[file]], "\\", "/");
         int opacityWidth, opacityHeight;
         stbi_uc *opacityPixels = stbi_load(fixTextureFile(opacityMapFile).c_str(), &opacityWidth, &opacityHeight, nullptr, 1);
 
+        // After signaling a possible loading error, we must check the loaded image's validity:
         if (!opacityPixels)
         {
             printf("Failed to load opacity mask [%s]\n", opacityMapFile.c_str());
@@ -511,7 +563,7 @@ std::string convertTexture(const std::string &file, const std::string &basePath,
         assert(texWidth == opacityWidth);
         assert(texHeight == opacityHeight);
 
-        // store the opacity mask in the alpha component of this image
+        // store the opacity values in the alpha component of this albedo texture
         if (opacityPixels)
             for (int y = 0; y != opacityHeight; y++)
                 for (int x = 0; x != opacityWidth; x++)
@@ -520,6 +572,8 @@ std::string convertTexture(const std::string &file, const std::string &basePath,
         stbi_image_free(opacityPixels);
     }
 
+    // allocate a maximum number of bytes to hold the output image. The output texture size isn't
+    // bigger than the constants we defined at the start of this function
     const uint32_t imgSize = texWidth * texHeight * texChannels;
     std::vector<uint8_t> mipData(imgSize);
     uint8_t *dst = mipData.data();
@@ -527,6 +581,7 @@ std::string convertTexture(const std::string &file, const std::string &basePath,
     const int newW = std::min(texWidth, maxNewWidth);
     const int newH = std::min(texHeight, maxNewHeight);
 
+    // a simple function for rescaling an image without losing too much quality
     stbir_resize_uint8(src, texWidth, texHeight, 0, dst, newW, newH, 0, texChannels);
 
     stbi_write_png(newFile.c_str(), newW, newH, texChannels, dst, 0);
@@ -535,22 +590,33 @@ std::string convertTexture(const std::string &file, const std::string &basePath,
         stbi_image_free(pixels);
 
     return newFile;
+    // the converted dataset is always valid and requires significantly fewer runtime checks
 }
 
+// generate the internal filenames for each of the textures and convert the contents of each texture into a
+// GPU-compatible format
+// As parameters, this routine accepts a list of material descriptions, an output directory
+// for texture data, and the containers for all the texture files and opacity maps
 void convertAndDownscaleAllTextures(
     const std::vector<MaterialDescription> &materials, const std::string &basePath, std::vector<std::string> &files, std::vector<std::string> &opacityMaps)
 {
+    // Each of the opacity maps is combined with the albedo map. To keep the
+    // correspondence between the opacity map list and the global texture indices, we will
+    // use a standard C++ hash table
     std::unordered_map<std::string, uint32_t> opacityMapIndices(files.size());
 
+    // associate this opacity map with the albedo map
     for (const auto &m : materials)
         if (m.opacityMap_ != 0xFFFFFFFF && m.albedoMap_ != 0xFFFFFFFF)
             opacityMapIndices[files[m.albedoMap_]] = (uint32_t)m.opacityMap_;
 
+    // takes a source texture filename and returns a modified texture filename
     auto converter = [&](const std::string &s) -> std::string
     {
         return convertTexture(s, basePath, opacityMapIndices, opacityMaps);
     };
 
+    // use the std::transform() algorithm to convert all of the texture files
     std::transform(std::execution::par, std::begin(files), std::end(files), std::begin(files), converter);
 }
 
@@ -680,7 +746,7 @@ int main()
         processScene(cfg);
 
     // Final step: optimize bistro scene
-	// mergeBistro();
+    // mergeBistro();
 
     return 0;
 }
