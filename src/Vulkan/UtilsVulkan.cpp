@@ -770,6 +770,35 @@ uint32_t findMemoryType(VkPhysicalDevice device, uint32_t typeFilter, VkMemoryPr
 	return 0xFFFFFFFF;
 }
 
+/** Offscreen rendering helpers */
+bool createOffscreenImage(VulkanRenderDevice &vkDev,
+						  VkImage &textureImage, VkDeviceMemory &textureImageMemory,
+						  uint32_t texWidth, uint32_t texHeight,
+						  VkFormat texFormat,
+						  uint32_t layerCount, VkImageCreateFlags flags)
+{
+	return createImage(vkDev.device, vkDev.physicalDevice, texWidth, texHeight, texFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT /* necessary only for screenshot */ | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage, textureImageMemory, flags);
+}
+
+bool createDepthSampler(VkDevice device, VkSampler *sampler)
+{
+	VkSamplerCreateInfo si = {
+		.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+		.magFilter = VK_FILTER_LINEAR,
+		.minFilter = VK_FILTER_LINEAR,
+		.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+		.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+		.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+		.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+		.mipLodBias = 0.0f,
+		.maxAnisotropy = 1.0f,
+		.minLod = 0.0f,
+		.maxLod = 1.0f,
+		.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE};
+
+	return (vkCreateSampler(device, &si, nullptr, sampler) == VK_SUCCESS);
+}
+
 bool createSharedBuffer(VulkanRenderDevice &vkDev, VkDeviceSize size, VkBufferUsageFlags usage,
 						VkMemoryPropertyFlags properties, VkBuffer &buffer, VkDeviceMemory &bufferMemory)
 {

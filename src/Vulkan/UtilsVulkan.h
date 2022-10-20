@@ -75,6 +75,17 @@ struct VulkanImage final
 	VkImageView imageView = nullptr;
 };
 
+// Utility structure for Renderer classes to know the details about starting this pass
+// holds a Vulkan handle, along with the list of parameters that were used to create this render pass:
+struct RenderPass
+{
+	RenderPass() = default;
+	explicit RenderPass(VulkanRenderDevice &device, bool useDepth = true, const RenderPassCreateInfo &ci = RenderPassCreateInfo());
+
+	RenderPassCreateInfo info;
+	VkRenderPass handle = VK_NULL_HANDLE;
+};
+
 struct VulkanBuffer
 {
 	VkBuffer buffer;
@@ -229,6 +240,13 @@ bool createPBRVertexBuffer(VulkanRenderDevice &vkDev, const char *filename, VkBu
 
 void destroyVulkanImage(VkDevice device, VulkanImage &image);
 void destroyVulkanTexture(VkDevice device, VulkanTexture &texture);
+
+bool createOffscreenImage(VulkanRenderDevice &vkDev,
+						  VkImage &textureImage, VkDeviceMemory &textureImageMemory,
+						  uint32_t texWidth, uint32_t texHeight,
+						  VkFormat texFormat,
+						  uint32_t layerCount, VkImageCreateFlags flags);
+bool createDepthSampler(VkDevice device, VkSampler *sampler);
 
 bool createMIPTextureImageFromData(VulkanRenderDevice &vkDev,
 								   VkImage &textureImage, VkDeviceMemory &textureImageMemory,
