@@ -1,7 +1,7 @@
 // A lightweight introduction to the glTF 2.0 shading model can be found at 
 // https://github.com/KhronosGroup/glTF-Sample-Viewer/tree/glTF-WebGL-PBR.
 
-#include "Vulkan/VulkanApp.h"
+#include "Framework/VulkanApp.h"
 #include "Vulkan/VulkanClear.h"
 #include "Vulkan/VulkanFinish.h"
 #include "Vulkan/PBRModelRenderer.h"

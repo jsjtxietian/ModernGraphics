@@ -75,17 +75,6 @@ struct VulkanImage final
 	VkImageView imageView = nullptr;
 };
 
-// Utility structure for Renderer classes to know the details about starting this pass
-// holds a Vulkan handle, along with the list of parameters that were used to create this render pass:
-struct RenderPass
-{
-	RenderPass() = default;
-	explicit RenderPass(VulkanRenderDevice &device, bool useDepth = true, const RenderPassCreateInfo &ci = RenderPassCreateInfo());
-
-	RenderPassCreateInfo info;
-	VkRenderPass handle = VK_NULL_HANDLE;
-};
-
 struct VulkanBuffer
 {
 	VkBuffer buffer;
@@ -140,6 +129,17 @@ enum eRenderPassBit : uint8_t
 	eRenderPassBit_Offscreen = 0x04,
 	// keep VK_IMAGE_LAYOUT_*_ATTACHMENT_OPTIMAL
 	eRenderPassBit_OffscreenInternal = 0x08,
+};
+
+// Utility structure for Renderer classes to know the details about starting this pass
+// holds a Vulkan handle, along with the list of parameters that were used to create this render pass:
+struct RenderPass
+{
+	RenderPass() = default;
+	explicit RenderPass(VulkanRenderDevice &device, bool useDepth = true, const RenderPassCreateInfo &ci = RenderPassCreateInfo());
+
+	RenderPassCreateInfo info;
+	VkRenderPass handle = VK_NULL_HANDLE;
 };
 
 void CHECK(bool check, const char *fileName, int lineNumber);
@@ -206,7 +206,9 @@ bool createPipelineLayout(VkDevice device, VkDescriptorSetLayout dsLayout, VkPip
 bool createPipelineLayoutWithConstants(VkDevice device, VkDescriptorSetLayout dsLayout,
 									   VkPipelineLayout *pipelineLayout, uint32_t vtxConstSize,
 									   uint32_t fragConstSize);
+bool createColorOnlyRenderPass(VulkanRenderDevice &device, VkRenderPass *renderPass, const RenderPassCreateInfo &ci, VkFormat colorFormat = VK_FORMAT_B8G8R8A8_UNORM);
 bool createColorAndDepthRenderPass(VulkanRenderDevice &device, bool useDepth, VkRenderPass *renderPass, const RenderPassCreateInfo &ci, VkFormat colorFormat = VK_FORMAT_B8G8R8A8_UNORM);
+bool createDepthOnlyRenderPass(VulkanRenderDevice &vkDev, VkRenderPass *renderPass, const RenderPassCreateInfo &ci);
 bool createGraphicsPipeline(
 	VulkanRenderDevice &vkDev,
 	VkRenderPass renderPass, VkPipelineLayout pipelineLayout,
@@ -231,6 +233,7 @@ bool executeComputeShader(VulkanRenderDevice &vkDev,
 bool createComputeDescriptorSetLayout(VkDevice device, VkDescriptorSetLayout *descriptorSetLayout);
 
 uint32_t bytesPerTexFormat(VkFormat fmt);
+VkFormat findDepthFormat(VkPhysicalDevice device);
 bool hasStencilComponent(VkFormat format);
 void destroyVulkanImage(VkDevice device, VulkanImage &image);
 
@@ -254,6 +257,9 @@ bool createMIPTextureImageFromData(VulkanRenderDevice &vkDev,
 								   VkFormat texFormat,
 								   uint32_t layerCount = 1, VkImageCreateFlags flags = 0);
 void copyMIPBufferToImage(VulkanRenderDevice &vkDev, VkBuffer buffer, VkImage image, uint32_t mipLevels, uint32_t width, uint32_t height, uint32_t bytesPP, uint32_t layerCount = 1);
+
+VkShaderStageFlagBits glslangShaderStageToVulkan(glslang_stage_t sh);
+
 inline VkPipelineShaderStageCreateInfo shaderStageInfo(VkShaderStageFlagBits shaderStage, ShaderModule &module, const char *entryPoint)
 {
 	return VkPipelineShaderStageCreateInfo{

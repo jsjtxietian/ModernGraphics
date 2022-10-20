@@ -19,7 +19,7 @@
 // used in Unreal Engine that does not rely on any precomputation, as described in
 // https://www.unrealengine.com/en-US/blog/physically-based-shading-on-mobile. 
 
-#include "Vulkan/VulkanApp.h"
+#include "Framework/VulkanApp.h"
 #include "Vulkan/ComputeBase.h"
 
 #include <gli/gli.hpp>
