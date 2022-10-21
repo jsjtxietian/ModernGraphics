@@ -68,6 +68,30 @@ struct VulkanRenderDevice final
 	VkCommandPool computeCommandPool;
 };
 
+// Features we need for our Vulkan context
+struct VulkanContextFeatures
+{
+	bool supportScreenshots_ = false;
+
+	bool geometryShader_ = true;
+	bool tessellationShader_ = false;
+
+	bool vertexPipelineStoresAndAtomics_ = false;
+	bool fragmentStoresAndAtomics_ = false;
+};
+
+// RAII
+struct VulkanContextCreator
+{
+	VulkanContextCreator() = default;
+
+	VulkanContextCreator(VulkanInstance &vk, VulkanRenderDevice &dev, void *window, int screenWidth, int screenHeight, const VulkanContextFeatures &ctxFeatures = VulkanContextFeatures());
+	~VulkanContextCreator();
+
+	VulkanInstance &instance;
+	VulkanRenderDevice &vkDev;
+};
+
 struct VulkanImage final
 {
 	VkImage image = nullptr;
@@ -167,6 +191,7 @@ VkResult createSemaphore(VkDevice device, VkSemaphore *outSemaphore);
 bool initVulkanRenderDevice(VulkanInstance &vk, VulkanRenderDevice &vkDev, uint32_t width, uint32_t height, std::function<bool(VkPhysicalDevice)> selector, VkPhysicalDeviceFeatures deviceFeatures);
 bool initVulkanRenderDeviceWithCompute(VulkanInstance &vk, VulkanRenderDevice &vkDev, uint32_t width, uint32_t height, VkPhysicalDeviceFeatures deviceFeatures);
 bool initVulkanRenderDeviceWithDescriptorIndex(VulkanInstance &vk, VulkanRenderDevice &vkDev, uint32_t width, uint32_t height, std::function<bool(VkPhysicalDevice)> selector, VkPhysicalDeviceFeatures2 deviceFeatures2);
+bool initVulkanRenderDevice3(VulkanInstance& vk, VulkanRenderDevice& vkDev, uint32_t width, uint32_t height, const VulkanContextFeatures& ctxFeatures = VulkanContextFeatures());
 void destroyVulkanRenderDevice(VulkanRenderDevice &vkDev);
 void destroyVulkanInstance(VulkanInstance &vk);
 

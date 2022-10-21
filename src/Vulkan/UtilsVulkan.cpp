@@ -2512,3 +2512,226 @@ bool createPBRVertexBuffer(VulkanRenderDevice &vkDev, const char *filename, VkBu
 
 	return true;
 }
+
+VkResult createDevice2(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2 deviceFeatures2, uint32_t graphicsFamily, VkDevice *device)
+{
+	const std::vector<const char *> extensions =
+		{
+			VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+			VK_KHR_MAINTENANCE3_EXTENSION_NAME,
+			VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
+			// for legacy drivers Vulkan 1.1
+			VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME};
+
+	const float queuePriority = 1.0f;
+
+	const VkDeviceQueueCreateInfo qci =
+		{
+			.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+			.pNext = nullptr,
+			.flags = 0,
+			.queueFamilyIndex = graphicsFamily,
+			.queueCount = 1,
+			.pQueuePriorities = &queuePriority};
+
+	const VkDeviceCreateInfo ci =
+		{
+			.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+			.pNext = &deviceFeatures2,
+			.flags = 0,
+			.queueCreateInfoCount = 1,
+			.pQueueCreateInfos = &qci,
+			.enabledLayerCount = 0,
+			.ppEnabledLayerNames = nullptr,
+			.enabledExtensionCount = static_cast<uint32_t>(extensions.size()),
+			.ppEnabledExtensionNames = extensions.data(),
+			.pEnabledFeatures = nullptr};
+
+	return vkCreateDevice(physicalDevice, &ci, nullptr, device);
+}
+
+VkResult createDevice2WithCompute(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2 deviceFeatures2, uint32_t graphicsFamily, uint32_t computeFamily, VkDevice *device)
+{
+	const std::vector<const char *> extensions =
+		{
+			VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+			VK_KHR_MAINTENANCE3_EXTENSION_NAME,
+			VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
+			// for legacy drivers Vulkan 1.1
+			VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME};
+
+	if (graphicsFamily == computeFamily)
+		return createDevice2(physicalDevice, deviceFeatures2, graphicsFamily, device);
+
+	const float queuePriorities[2] = {0.f, 0.f};
+	const VkDeviceQueueCreateInfo qciGfx =
+		{
+			.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+			.pNext = nullptr,
+			.flags = 0,
+			.queueFamilyIndex = graphicsFamily,
+			.queueCount = 1,
+			.pQueuePriorities = &queuePriorities[0]};
+
+	const VkDeviceQueueCreateInfo qciComp =
+		{
+			.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+			.pNext = nullptr,
+			.flags = 0,
+			.queueFamilyIndex = computeFamily,
+			.queueCount = 1,
+			.pQueuePriorities = &queuePriorities[1]};
+
+	const VkDeviceQueueCreateInfo qci[2] = {qciGfx, qciComp};
+
+	const VkDeviceCreateInfo ci =
+		{
+			.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+			.pNext = &deviceFeatures2,
+			.flags = 0,
+			.queueCreateInfoCount = 2,
+			.pQueueCreateInfos = qci,
+			.enabledLayerCount = 0,
+			.ppEnabledLayerNames = nullptr,
+			.enabledExtensionCount = static_cast<uint32_t>(extensions.size()),
+			.ppEnabledExtensionNames = extensions.data(),
+			.pEnabledFeatures = nullptr};
+
+	return vkCreateDevice(physicalDevice, &ci, nullptr, device);
+}
+
+bool initVulkanRenderDevice2WithCompute(VulkanInstance &vk, VulkanRenderDevice &vkDev, uint32_t width, uint32_t height, std::function<bool(VkPhysicalDevice)> selector, VkPhysicalDeviceFeatures2 deviceFeatures2, bool supportScreenshots)
+{
+	vkDev.framebufferWidth = width;
+	vkDev.framebufferHeight = height;
+
+	VK_CHECK(findSuitablePhysicalDevice(vk.instance, selector, &vkDev.physicalDevice));
+	vkDev.graphicsFamily = findQueueFamilies(vkDev.physicalDevice, VK_QUEUE_GRAPHICS_BIT);
+	//	VK_CHECK(createDevice2(vkDev.physicalDevice, deviceFeatures2, vkDev.graphicsFamily, &vkDev.device));
+	//	VK_CHECK(vkGetBestComputeQueue(vkDev.physicalDevice, &vkDev.computeFamily));
+	vkDev.computeFamily = findQueueFamilies(vkDev.physicalDevice, VK_QUEUE_COMPUTE_BIT);
+	VK_CHECK(createDevice2WithCompute(vkDev.physicalDevice, deviceFeatures2, vkDev.graphicsFamily, vkDev.computeFamily, &vkDev.device));
+
+	vkGetDeviceQueue(vkDev.device, vkDev.graphicsFamily, 0, &vkDev.graphicsQueue);
+	if (vkDev.graphicsQueue == nullptr)
+		exit(EXIT_FAILURE);
+
+	vkGetDeviceQueue(vkDev.device, vkDev.computeFamily, 0, &vkDev.computeQueue);
+	if (vkDev.computeQueue == nullptr)
+		exit(EXIT_FAILURE);
+
+	VkBool32 presentSupported = 0;
+	vkGetPhysicalDeviceSurfaceSupportKHR(vkDev.physicalDevice, vkDev.graphicsFamily, vk.surface, &presentSupported);
+	if (!presentSupported)
+		exit(EXIT_FAILURE);
+
+	VK_CHECK(createSwapchain(vkDev.device, vkDev.physicalDevice, vk.surface, vkDev.graphicsFamily, width, height, &vkDev.swapchain, supportScreenshots));
+	const size_t imageCount = createSwapchainImages(vkDev.device, vkDev.swapchain, vkDev.swapchainImages, vkDev.swapchainImageViews);
+	vkDev.commandBuffers.resize(imageCount);
+
+	VK_CHECK(createSemaphore(vkDev.device, &vkDev.semaphore));
+	VK_CHECK(createSemaphore(vkDev.device, &vkDev.renderSemaphore));
+
+	const VkCommandPoolCreateInfo cpi =
+		{
+			.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+			.flags = 0,
+			.queueFamilyIndex = vkDev.graphicsFamily};
+
+	VK_CHECK(vkCreateCommandPool(vkDev.device, &cpi, nullptr, &vkDev.commandPool));
+
+	const VkCommandBufferAllocateInfo ai =
+		{
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+			.pNext = nullptr,
+			.commandPool = vkDev.commandPool,
+			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+			.commandBufferCount = static_cast<uint32_t>(vkDev.swapchainImages.size()),
+		};
+
+	VK_CHECK(vkAllocateCommandBuffers(vkDev.device, &ai, &vkDev.commandBuffers[0]));
+
+	{
+		// Create compute command pool
+		const VkCommandPoolCreateInfo cpi1 =
+			{
+				.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+				.pNext = nullptr,
+				.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, /* Allow command from this pool buffers to be reset*/
+				.queueFamilyIndex = vkDev.computeFamily};
+		VK_CHECK(vkCreateCommandPool(vkDev.device, &cpi1, nullptr, &vkDev.computeCommandPool));
+
+		const VkCommandBufferAllocateInfo ai1 =
+			{
+				.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+				.pNext = nullptr,
+				.commandPool = vkDev.computeCommandPool,
+				.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+				.commandBufferCount = 1,
+			};
+
+		VK_CHECK(vkAllocateCommandBuffers(vkDev.device, &ai1, &vkDev.computeCommandBuffer));
+	}
+
+	vkDev.useCompute = true;
+
+	return true;
+}
+
+/* Combined initialization: all required rendering extensions for chapters 6,7,8,9 etc. with compute queue */
+bool initVulkanRenderDevice3(VulkanInstance &vk, VulkanRenderDevice &vkDev, uint32_t width, uint32_t height, const VulkanContextFeatures &ctxFeatures)
+{
+	VkPhysicalDeviceDescriptorIndexingFeaturesEXT physicalDeviceDescriptorIndexingFeatures = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT,
+		.shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
+		.descriptorBindingVariableDescriptorCount = VK_TRUE,
+		.runtimeDescriptorArray = VK_TRUE,
+	};
+
+	VkPhysicalDeviceFeatures deviceFeatures = {
+		/* for wireframe outlines */
+		.geometryShader = (VkBool32)(ctxFeatures.geometryShader_ ? VK_TRUE : VK_FALSE),
+		/* for tesselation experiments */
+		.tessellationShader = (VkBool32)(ctxFeatures.tessellationShader_ ? VK_TRUE : VK_FALSE),
+		/* for indirect instanced rendering */
+		.multiDrawIndirect = VK_TRUE,
+		.drawIndirectFirstInstance = VK_TRUE,
+		/* for OIT and general atomic operations */
+		.vertexPipelineStoresAndAtomics = (VkBool32)(ctxFeatures.vertexPipelineStoresAndAtomics_ ? VK_TRUE : VK_FALSE),
+		.fragmentStoresAndAtomics = (VkBool32)(ctxFeatures.fragmentStoresAndAtomics_ ? VK_TRUE : VK_FALSE),
+		/* for arrays of textures */
+		.shaderSampledImageArrayDynamicIndexing = VK_TRUE,
+		/* for GL <-> VK material shader compatibility */
+		.shaderInt64 = VK_TRUE,
+	};
+
+	VkPhysicalDeviceFeatures2 deviceFeatures2 = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+		.pNext = &physicalDeviceDescriptorIndexingFeatures,
+		.features = deviceFeatures /*  */
+	};
+
+	return initVulkanRenderDevice2WithCompute(vk, vkDev, width, height, isDeviceSuitable, deviceFeatures2, ctxFeatures.supportScreenshots_);
+}
+
+VulkanContextCreator::VulkanContextCreator(VulkanInstance &vk, VulkanRenderDevice &dev, void *window, int screenWidth, int screenHeight,
+										   const VulkanContextFeatures &ctxFeatures) : instance(vk),
+																					   vkDev(dev)
+{
+	createInstance(&vk.instance);
+
+	if (!setupDebugCallbacks(vk.instance, &vk.messenger, &vk.reportCallback))
+		exit(0);
+
+	if (glfwCreateWindowSurface(vk.instance, (GLFWwindow *)window, nullptr, &vk.surface))
+		exit(0);
+
+	if (!initVulkanRenderDevice3(vk, dev, screenWidth, screenHeight, ctxFeatures))
+		exit(0);
+}
+
+VulkanContextCreator::~VulkanContextCreator()
+{
+	destroyVulkanRenderDevice(vkDev);
+	destroyVulkanInstance(instance);
+}
