@@ -191,7 +191,7 @@ VkResult createSemaphore(VkDevice device, VkSemaphore *outSemaphore);
 bool initVulkanRenderDevice(VulkanInstance &vk, VulkanRenderDevice &vkDev, uint32_t width, uint32_t height, std::function<bool(VkPhysicalDevice)> selector, VkPhysicalDeviceFeatures deviceFeatures);
 bool initVulkanRenderDeviceWithCompute(VulkanInstance &vk, VulkanRenderDevice &vkDev, uint32_t width, uint32_t height, VkPhysicalDeviceFeatures deviceFeatures);
 bool initVulkanRenderDeviceWithDescriptorIndex(VulkanInstance &vk, VulkanRenderDevice &vkDev, uint32_t width, uint32_t height, std::function<bool(VkPhysicalDevice)> selector, VkPhysicalDeviceFeatures2 deviceFeatures2);
-bool initVulkanRenderDevice3(VulkanInstance& vk, VulkanRenderDevice& vkDev, uint32_t width, uint32_t height, const VulkanContextFeatures& ctxFeatures = VulkanContextFeatures());
+bool initVulkanRenderDevice3(VulkanInstance &vk, VulkanRenderDevice &vkDev, uint32_t width, uint32_t height, const VulkanContextFeatures &ctxFeatures = VulkanContextFeatures());
 void destroyVulkanRenderDevice(VulkanRenderDevice &vkDev);
 void destroyVulkanInstance(VulkanInstance &vk);
 
@@ -318,4 +318,15 @@ inline VkWriteDescriptorSet imageWriteDescriptorSet(VkDescriptorSet ds, const Vk
 	return VkWriteDescriptorSet{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr,
 								ds, bindIdx, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 								ii, nullptr, nullptr};
+}
+
+/* Check if the texture is used as a depth buffer */
+inline bool isDepthFormat(VkFormat fmt)
+{
+	return (fmt == VK_FORMAT_D16_UNORM) ||
+		   (fmt == VK_FORMAT_X8_D24_UNORM_PACK32) ||
+		   (fmt == VK_FORMAT_D32_SFLOAT) ||
+		   (fmt == VK_FORMAT_D16_UNORM_S8_UINT) ||
+		   (fmt == VK_FORMAT_D24_UNORM_S8_UINT) ||
+		   (fmt == VK_FORMAT_D32_SFLOAT_S8_UINT);
 }
