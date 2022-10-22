@@ -46,3 +46,6 @@
 [submodule "3rdparty/rapidjson"]
 	path = 3rdparty/rapidjson
 	url = https://github.com/Tencent/rapidjson.git
+[submodule "3rdparty/ImGuizmo"]
+	path = 3rdparty/ImGuizmo
+	url = https://github.com/CedricGuillemet/ImGuizmo
