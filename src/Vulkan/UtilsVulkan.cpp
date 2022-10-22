@@ -2735,3 +2735,22 @@ VulkanContextCreator::~VulkanContextCreator()
 	destroyVulkanRenderDevice(vkDev);
 	destroyVulkanInstance(instance);
 }
+
+void updateTextureInDescriptorSetArray(VulkanRenderDevice &vkDev, VkDescriptorSet ds, VulkanTexture t, uint32_t textureIndex, uint32_t bindingIdx)
+{
+	const VkDescriptorImageInfo imageInfo = {
+		.sampler = t.sampler,
+		.imageView = t.image.imageView,
+		.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+
+	VkWriteDescriptorSet writeSet = {
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.dstSet = ds,
+		.dstBinding = bindingIdx,
+		.dstArrayElement = textureIndex,
+		.descriptorCount = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+		.pImageInfo = &imageInfo};
+
+	vkUpdateDescriptorSets(vkDev.device, 1, &writeSet, 0, nullptr);
+}

@@ -54,6 +54,10 @@ include_directories(3rdparty/stb)
 #imgui
 include_directories(3rdparty/imgui)
 
+#imguizmo
+include_directories(3rdparty/ImGuizmo)
+add_subdirectory(3rdparty/ImGuizmo)
+
 #rapidjson
 include_directories(3rdparty/rapidjson/include)
 
@@ -167,7 +171,7 @@ endif()
 
 
 
-target_link_libraries(SampleTest glad glfw volk glslang SPIRV assimp)
+target_link_libraries(SampleTest glad glfw volk glslang SPIRV assimp ImGuizmo)
 
 
 if(BUILD_WITH_EASY_PROFILER)

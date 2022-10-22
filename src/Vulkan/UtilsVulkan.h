@@ -334,3 +334,13 @@ inline bool isDepthFormat(VkFormat fmt)
 		   (fmt == VK_FORMAT_D24_UNORM_S8_UINT) ||
 		   (fmt == VK_FORMAT_D32_SFLOAT_S8_UINT);
 }
+
+inline uint32_t getVulkanBufferAlignment(VulkanRenderDevice &vkDev)
+{
+	VkPhysicalDeviceProperties devProps;
+	vkGetPhysicalDeviceProperties(vkDev.physicalDevice, &devProps);
+	return static_cast<uint32_t>(devProps.limits.minStorageBufferOffsetAlignment);
+}
+
+/* This routine updates one texture discriptor in one descriptor set */
+void updateTextureInDescriptorSetArray(VulkanRenderDevice &vkDev, VkDescriptorSet ds, VulkanTexture t, uint32_t textureIndex, uint32_t bindingIdx);
