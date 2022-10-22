@@ -13,6 +13,9 @@
 	These are buffers, textures (samplers, but we call them "textures" here) and arrays of textures.
 */
 
+// Individual attachments are described in a similar fashion. The attachment contains
+// a DescriptorInfo structure that tells us about the usage type and exact shader
+// stages where the attachment is used:
 /// Common information for all bindings (buffer/sampler type and shader stage(s) where this item is used)
 struct DescriptorInfo
 {
@@ -20,6 +23,11 @@ struct DescriptorInfo
 	VkShaderStageFlags shaderStageFlags;
 };
 
+// A buffer attachment contains a reference to the VulkanBuffer structure, which
+// provides a buffer size and an offset to the data. The offset and size fields may seem
+// redundant because the size is already present in the VulkanBuffer structure.
+// However, we have frequently used parts of a single buffer as two logical attachments.
+// For example, this is the case with the index and vertex data buffers:
 struct BufferAttachment
 {
 	DescriptorInfo dInfo;
@@ -95,6 +103,17 @@ inline BufferAttachment storageBufferAttachment(VulkanBuffer buffer, uint32_t of
 	return makeBufferAttachment(buffer, offset, size, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, shaderStageFlags);
 }
 
+
+// The descriptor sets and descriptor pools are also allocated by the methods of this class. Here is
+// a list of requirements for descriptor set management:
+// • There are three types of objects to support: buffers, textures, and arrays of textures
+//   (or indexed textures). we will not use indexed buffers, though they might be useful in general.
+// • We should be able to specify the layout of a descriptor set.
+// • Once the descriptor set has been created, we should be able to perform "update"
+//   operations to fill the descriptor set with concrete resource handles.
+
+// The first and second requirements immediately tell us to create a structure that we
+// can use as input for our descriptor set creation routine:
 /** An aggregate structure with all the data for descriptor set (or descriptor set layout) allocation */
 struct DescriptorSetInfo
 {

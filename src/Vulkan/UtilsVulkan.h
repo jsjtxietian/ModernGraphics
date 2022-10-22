@@ -116,6 +116,7 @@ struct SwapchainSupportDetails final
 };
 
 // Aggregate structure for passing around the texture data
+// will deduce rendering pass parameters for offscreen buffers from this data
 struct VulkanTexture final
 {
 	uint32_t width;
@@ -126,6 +127,9 @@ struct VulkanTexture final
 	VulkanImage image;
 	VkSampler sampler;
 
+	// keeps track of the layout of this texture at
+	// creation time. This is important so that we correctly use the texture as an offscreen
+	// buffer or as a texture source for shaders
 	// Offscreen buffers require VK_IMAGE_LAYOUT_GENERAL && static textures have VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
 	VkImageLayout desiredLayout;
 };

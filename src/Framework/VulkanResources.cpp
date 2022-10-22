@@ -297,13 +297,16 @@ VulkanBuffer VulkanResources::addVertexBuffer(uint32_t indexBufferSize, const vo
 
 VkDescriptorPool VulkanResources::addDescriptorPool(const DescriptorSetInfo &dsInfo, uint32_t dSetCount)
 {
+	// must count each type of buffer and all the samplers
 	uint32_t uniformBufferCount = 0;
 	uint32_t storageBufferCount = 0;
 	uint32_t samplerCount = static_cast<uint32_t>(dsInfo.textures.size());
 
+	// Each texture array generates a fixed number of textures:
 	for (const auto &ta : dsInfo.textureArrays)
 		samplerCount += static_cast<uint32_t>(ta.textures.size());
 
+	// The buffers we will use should be of the storage or uniform type:
 	for (const auto &b : dsInfo.buffers)
 	{
 		if (b.dInfo.type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
@@ -312,16 +315,21 @@ VkDescriptorPool VulkanResources::addDescriptorPool(const DescriptorSetInfo &dsI
 			storageBufferCount++;
 	}
 
+	// In our GLSL shaders, we use uniforms, storage buffers, and texture samplers. The
+	// poolSizes array contains three (or less, if a buffer type is absent) items for each type of buffer
 	std::vector<VkDescriptorPoolSize> poolSizes;
 
 	/* printf("Allocating pool[%d | %d | %d]\n", (int)uniformBufferCount, (int)storageBufferCount, (int)samplerCount); */
 
+	// For each buffer type, we add an item to poolSizes:
 	if (uniformBufferCount)
 		poolSizes.push_back(VkDescriptorPoolSize{.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = dSetCount * uniformBufferCount});
 
+	// The storage buffer differs by a single constant in the type field:
 	if (storageBufferCount)
 		poolSizes.push_back(VkDescriptorPoolSize{.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = dSetCount * storageBufferCount});
 
+	// Texture samplers also generate an item in the poolSizes array:
 	if (samplerCount)
 		poolSizes.push_back(VkDescriptorPoolSize{.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = dSetCount * samplerCount});
 
@@ -519,7 +527,7 @@ bool VulkanResources::createGraphicsPipeline(
 	return true;
 }
 
-// wraps the createGraphicsPipeline() function. 
+// wraps the createGraphicsPipeline() function.
 // Once it's been created, the pipeline is put into yet another container of Vulkan objects
 VkPipeline VulkanResources::addPipeline(VkRenderPass renderPass, VkPipelineLayout pipelineLayout,
 										const std::vector<const char *> &shaderFiles,
@@ -538,10 +546,14 @@ VkPipeline VulkanResources::addPipeline(VkRenderPass renderPass, VkPipelineLayou
 	return pipeline;
 }
 
+// at this point, we are omitting the actual buffer handles from attachment descriptions
 VkDescriptorSetLayout VulkanResources::addDescriptorSetLayout(const DescriptorSetInfo &dsInfo)
 {
+	// specify some extra flags for our indexed texture arrays:
 	VkDescriptorSetLayout descriptorSetLayout;
 
+	// For each type of resource, we collect the appropriate bindings. The loops over our
+	// buffers and textures push attachments to the bindings array:
 	uint32_t bindingIdx = 0;
 
 	std::vector<VkDescriptorSetLayoutBinding> bindings;
@@ -556,11 +568,18 @@ VkDescriptorSetLayout VulkanResources::addDescriptorSetLayout(const DescriptorSe
 		bindings.push_back(descriptorSetLayoutBinding(bindingIdx++, i.dInfo.type /*VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER*/, i.dInfo.shaderStageFlags));
 	}
 
+	// For the texture array attachments, we must also store the non-zero binding flag:
 	for (const auto &t : dsInfo.textureArrays)
 	{
 		bindings.push_back(descriptorSetLayoutBinding(bindingIdx++, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, t.dInfo.shaderStageFlags, static_cast<uint32_t>(t.textures.size())));
 	}
 
+	// a VkDevice object is created with the
+	// shaderSampledImageArrayDynamicIndexing option enabled, so we must
+	// pass the descriptor binding flags to a descriptor layout information structure.
+
+	// The usual creation structure for the layout is defined with references to the layout
+	// binding flags and binding descriptions:
 	const VkDescriptorSetLayoutCreateInfo layoutInfo = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
 		.pNext = nullptr,
@@ -578,6 +597,10 @@ VkDescriptorSetLayout VulkanResources::addDescriptorSetLayout(const DescriptorSe
 	return descriptorSetLayout;
 }
 
+//  a wrapper on top of vkAllocateDescriptorSets()
+// the descriptor sets are created early at runtime, usually in the
+// constructor of some renderer class. All we need to do is fill the DescriptorSetInfo
+// structure with references to our loaded texture and buffer attachments
 VkDescriptorSet VulkanResources::addDescriptorSet(VkDescriptorPool descriptorPool, VkDescriptorSetLayout dsLayout)
 {
 	VkDescriptorSet descriptorSet;
@@ -603,6 +626,10 @@ VkDescriptorSet VulkanResources::addDescriptorSet(VkDescriptorPool descriptorPoo
 	creates a list of DescriptorWrite operations with required buffer/image info structures
 	and calls the vkUpdateDescriptorSets()
 */
+// attaches the actual buffers and texture samplers to the descriptor set's logical slots
+// This function prepares a list of the descriptor write operations for all the buffers and
+// textures. Note that we do not provide a method to update some specific descriptor
+// set item, but the entire set. Individual buffer and image descriptors are stored in separate arrays:
 void VulkanResources::updateDescriptorSet(VkDescriptorSet ds, const DescriptorSetInfo &dsInfo)
 {
 	uint32_t bindingIdx = 0;
@@ -612,6 +639,7 @@ void VulkanResources::updateDescriptorSet(VkDescriptorSet ds, const DescriptorSe
 	std::vector<VkDescriptorImageInfo> imageDescriptors(dsInfo.textures.size());
 	std::vector<VkDescriptorImageInfo> imageArrayDescriptors;
 
+	// The first array is used to convert buffer descriptions into VkDescriptorBufferInfo structures:
 	for (size_t i = 0; i < dsInfo.buffers.size(); i++)
 	{
 		BufferAttachment b = dsInfo.buffers[i];
@@ -624,6 +652,7 @@ void VulkanResources::updateDescriptorSet(VkDescriptorSet ds, const DescriptorSe
 		descriptorWrites.push_back(bufferWriteDescriptorSet(ds, &bufferDescriptors[i], bindingIdx++, b.dInfo.type));
 	}
 
+	// The second one is used to convert all individual textures into VkDescriptorImageInfo structures:
 	for (size_t i = 0; i < dsInfo.textures.size(); i++)
 	{
 		VulkanTexture t = dsInfo.textures[i].texture;
@@ -636,12 +665,17 @@ void VulkanResources::updateDescriptorSet(VkDescriptorSet ds, const DescriptorSe
 		descriptorWrites.push_back(imageWriteDescriptorSet(ds, &imageDescriptors[i], bindingIdx++));
 	}
 
+	// Finally, the trickiest pair of loops is required to process a list of texture arrays. The
+	// first loop collects all the individual image descriptions in a single array and stores
+	// the offsets of these images for each individual texture array. To keep track of the
+	// offset in the global list of textures, we will use the taOffset variable:
 	uint32_t taOffset = 0;
 	std::vector<uint32_t> taOffsets(dsInfo.textureArrays.size());
 	for (size_t ta = 0; ta < dsInfo.textureArrays.size(); ta++)
 	{
 		taOffsets[ta] = taOffset;
-
+		// Inside each texture array, we must convert each texture handle, just as we did with
+		// single texture attachments:
 		for (size_t j = 0; j < dsInfo.textureArrays[ta].textures.size(); j++)
 		{
 			VulkanTexture t = dsInfo.textureArrays[ta].textures[j];
@@ -653,10 +687,13 @@ void VulkanResources::updateDescriptorSet(VkDescriptorSet ds, const DescriptorSe
 
 			imageArrayDescriptors.push_back(imageInfo); // item 'taOffsets[ta] + j'
 		}
-
+		// The offset of the global texture array is updated with the size of the current texture array
 		taOffset += static_cast<uint32_t>(dsInfo.textureArrays[ta].textures.size());
 	}
 
+	// The second loop over the textureArrays field fills Vulkan's write
+	// descriptor set operation structure with the appropriate pointers inside the
+	// imageArrayDescriptors array:
 	for (size_t ta = 0; ta < dsInfo.textureArrays.size(); ta++)
 	{
 		VkWriteDescriptorSet writeSet = {
