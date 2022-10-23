@@ -1,3 +1,5 @@
+#if 0
+
 // A lightweight introduction to the glTF 2.0 shading model can be found at 
 // https://github.com/KhronosGroup/glTF-Sample-Viewer/tree/glTF-WebGL-PBR.
 
@@ -163,3 +165,5 @@ int main()
 
     return 0;
 }
+
+#endif

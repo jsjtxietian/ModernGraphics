@@ -1,7 +1,7 @@
 ﻿//
 #version 460
 
-#include <data/shaders/chapter05/GridParameters.h>
+#include <data/shaders/GridParameters.h>
 
 layout (location=0) out vec2 uv;
 

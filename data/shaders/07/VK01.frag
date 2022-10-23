@@ -24,7 +24,7 @@ layout(binding = 8) uniform sampler2D   texBRDF_LUT;
 // All 2D textures for all of the materials
 layout(binding = 9) uniform sampler2D textures[];
 
-#include <data/shaders/chapter06/PBR.sp>
+#include <data/shaders/PBR.sp>
 
 void main()
 {

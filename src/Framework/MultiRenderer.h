@@ -68,8 +68,8 @@ private:
 	tf::Executor executor_;
 };
 
-constexpr const char *DefaultMeshVertexShader = "data/shaders/chapter07/VK01.vert";
-constexpr const char *DefaultMeshFragmentShader = "data/shaders/chapter07/VK01.frag";
+constexpr const char *DefaultMeshVertexShader = "data/shaders/07/VK01.vert";
+constexpr const char *DefaultMeshFragmentShader = "data/shaders/07/VK01.frag";
 
 struct MultiRenderer : public Renderer
 {
