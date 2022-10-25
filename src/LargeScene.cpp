@@ -1,4 +1,5 @@
-// see Scene data sceheme.ong
+#if 0
+// see Scene data sceheme.png
 // The VKSceneData class loads the geometry data for all the scene objects, a list of
 // material parameters, and an array of textures, referenced by individual materials. All the
 // loaded data is transferred into the appropriate GPU buffers. The MultiRenderer class
@@ -65,3 +66,5 @@ int main()
     app.mainLoop();
     return 0;
 }
+
+#endif 
