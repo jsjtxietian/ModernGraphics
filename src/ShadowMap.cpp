@@ -1,3 +1,7 @@
+//  calculating the light's projection and view matrices,
+// rendering the entire scene from the light's point of view into an offscreen framebuffer, 
+// and rendering the entire scene again using the offscreen framebuffer's depth texture to apply the shadow map.
+
 #include "Framework/VulkanApp.h"
 #include "Framework/LineCanvas.h"
 #include "Framework/VKQuadRenderer.h"
@@ -9,6 +13,10 @@ bool g_RotateModel = true;
 
 float g_ModelAngle = 0.0f;
 
+// The light's view and projection matrices can be calculated from the following
+// variables. Here, g_LightAngle is going to be the field-of-view angle of our light,
+// g_LightInnerAngle defines the light's inner code, while g_LightXAngle and
+// g_LightYAngle are the rotation angles around the X and Y axis respectively:
 float g_LightAngle = 60.0f;
 float g_LightNear = 1.0f;
 float g_LightFar = 100.0f;
@@ -172,8 +180,10 @@ private:
 	OffscreenMeshRenderer depthRenderer;
 	OffscreenMeshRenderer planeRenderer;
 
+	// a debug view of our light's frustum
 	LineCanvas canvas;
 
+	// a plane that will receive a shadow
 	QuadRenderer quads;
 	GuiRenderer imgui;
 };

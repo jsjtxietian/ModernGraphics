@@ -25,7 +25,7 @@ struct VertexData
 layout(binding=1) readonly buffer Vertices { VertexData data[]; } in_Vertices;
 layout(binding=2) readonly buffer Indices  { uint data[]; } in_Indices;
 
-// Vulkan's Z is in 0..1
+//  the clip-space Z axis goes from 0 to 1 (or use ARB_clip_control extension)
 const mat4 scaleBias = mat4( 
 	0.5, 0.0, 0.0, 0.0,
 	0.0, 0.5, 0.0, 0.0,
