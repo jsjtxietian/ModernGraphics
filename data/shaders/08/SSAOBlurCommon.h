@@ -5,6 +5,7 @@ layout(location = 0) out vec4 outColor;
 
 layout(binding = 0) uniform sampler2D texSSAO;
 
+// a table containing weights for Gaussian blur. They add up to 1.0:
 const vec4 gaussFilter[11] = vec4[](
 	vec4(-5.0, 0.0, 0.0,  3.0/133.0),
 	vec4(-4.0, 0.0, 0.0,  6.0/133.0),

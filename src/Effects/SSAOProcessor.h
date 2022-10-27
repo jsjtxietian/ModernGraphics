@@ -51,6 +51,8 @@ struct SSAOProcessor : public CompositeRenderer
         renderers_.emplace_back(blurYShaderToColor, false);
         renderers_.emplace_back(finalShaderToColor, false);
 
+        // None of these renderers performs depth buffer writes, so the second parameter, useDepth,
+        // should be set to false:
         renderers_.emplace_back(SSAO, false);
         renderers_.emplace_back(ssaoColorToShader, false);
 
@@ -64,10 +66,12 @@ struct SSAOProcessor : public CompositeRenderer
         renderers_.emplace_back(finalColorToShader, false);
     }
 
+    // For debugging purposes, we expose access to intermediate textures. 
     inline VulkanTexture getSSAO() const { return SSAOTex; }
     inline VulkanTexture getBlurX() const { return SSAOBlurXTex; }
     inline VulkanTexture getBlurY() const { return SSAOBlurYTex; }
 
+    // The SSAO parameters are chosen arbitrarily and can be tweaked using the ImGui interface:
     struct Params
     {
         float scale_ = 1.0f;
@@ -80,6 +84,8 @@ struct SSAOProcessor : public CompositeRenderer
     } * params;
 
 private:
+    // the rotation vectors texture that contains 16 random vec3 vectors. This technique was
+    // proposed by Crytek in the early days of real-time SSAO algorithms
     VulkanTexture rotateTex;
     VulkanTexture SSAOTex, SSAOBlurXTex, SSAOBlurYTex;
 
