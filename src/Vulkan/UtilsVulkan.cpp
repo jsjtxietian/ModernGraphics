@@ -2754,3 +2754,15 @@ void updateTextureInDescriptorSetArray(VulkanRenderDevice &vkDev, VkDescriptorSe
 
 	vkUpdateDescriptorSets(vkDev.device, 1, &writeSet, 0, nullptr);
 }
+
+bool setVkObjectName(VulkanRenderDevice &vkDev, void *object, VkObjectType objType, const char *name)
+{
+	VkDebugUtilsObjectNameInfoEXT nameInfo = {
+		.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+		.pNext = nullptr,
+		.objectType = objType,
+		.objectHandle = (uint64_t)object,
+		.pObjectName = name};
+
+	return (vkSetDebugUtilsObjectNameEXT(vkDev.device, &nameInfo) == VK_SUCCESS);
+}

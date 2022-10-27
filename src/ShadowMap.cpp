@@ -1,4 +1,5 @@
-//  calculating the light's projection and view matrices,
+#if 0
+// calculating the light's projection and view matrices,
 // rendering the entire scene from the light's point of view into an offscreen framebuffer, 
 // and rendering the entire scene again using the offscreen framebuffer's depth texture to apply the shadow map.
 
@@ -194,3 +195,5 @@ int main()
 	app.mainLoop();
 	return 0;
 }
+
+#endif

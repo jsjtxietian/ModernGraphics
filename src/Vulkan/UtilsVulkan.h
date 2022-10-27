@@ -342,5 +342,12 @@ inline uint32_t getVulkanBufferAlignment(VulkanRenderDevice &vkDev)
 	return static_cast<uint32_t>(devProps.limits.minStorageBufferOffsetAlignment);
 }
 
+bool setVkObjectName(VulkanRenderDevice &vkDev, void *object, VkObjectType objType, const char *name);
+
+inline bool setVkImageName(VulkanRenderDevice &vkDev, void *object, const char *name)
+{
+	return setVkObjectName(vkDev, object, VK_OBJECT_TYPE_IMAGE, name);
+}
+
 /* This routine updates one texture discriptor in one descriptor set */
 void updateTextureInDescriptorSetArray(VulkanRenderDevice &vkDev, VkDescriptorSet ds, VulkanTexture t, uint32_t textureIndex, uint32_t bindingIdx);
