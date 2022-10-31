@@ -1,10 +1,21 @@
+// https://en.wikipedia.org/wiki/Bloom_(shader_effect)
+
+// Strictly speaking, applying a tone-mapping operator directly to RGB channel values is very
+// crude. The more correct model would be to tone-map the luminance and then apply it back
+// to RGB values.
+
+// This demo uses an asynchronous texture-loadingapproach. If the calls to the asynchronous
+// texture loader are removed, the demo just loads the textures upfront. As a side note,
+// Vulkan allows the use of dedicated transfer queues for asynchronous uploading of the
+// textures into the GPU, but this requires some more tweaking in the Vulkan device and
+// queue-initialization code. We leave this as an exercise to our readers.
+
 #include "Framework/VulkanApp.h"
 #include "Framework/GuiRenderer.h"
 #include "Framework/MultiRenderer.h"
-#include "Framework/QuadRenderer.h"
+#include "Framework/VKQuadRenderer.h"
 #include "Framework/CubeRenderer.h"
-
-#include "Framework/effects/HDRProcessor.h"
+#include "Effects/HDRProcessor.h"
 
 #include "Framework/Barriers.h"
 
@@ -13,9 +24,12 @@ const uint32_t TEX_RGB = (0x2 << 16);
 struct MyApp : public CameraApp
 {
     MyApp() : CameraApp(-95, -95),
+              // https://hdrihaven.com/hdri/?h=immenstadter_horn
+              // generated using FilterEnvmap tool
               cubemap(ctx_.resources.loadCubeMap("data/immenstadter_horn_2k.hdr")),
               cubemapIrr(ctx_.resources.loadCubeMap("data/immenstadter_horn_2k_irradiance.hdr")),
-
+              // MultiRenderer requires two input textures, one for color and one for the
+              // depth buffer. A 32-bit RGBA output texture for the HDR postprocessor is allocated:
               HDRDepth(ctx_.resources.addDepthTexture()),
               HDRLuminance(ctx_.resources.addColorTexture(0, 0, LuminosityFormat)),
               luminanceResult(ctx_.resources.addColorTexture(1, 1, LuminosityFormat)),
@@ -32,7 +46,12 @@ struct MyApp : public CameraApp
                            {HDRLuminance, HDRDepth},
                            ctx_.resources.addRenderPass({HDRLuminance, HDRDepth}, RenderPassCreateInfo{
                                                                                       .clearColor_ = true, .clearDepth_ = true, .flags_ = eRenderPassBit_First | eRenderPassBit_Offscreen})),
-
+              // The only MultiRenderer instance in this application outputs to previously
+              // allocated buffers using the same shaders as in 07
+              // A custom offscreen rendering pass compatible with our HDR framebuffers is a
+              // required parameter. The constructor body creates a rendering sequence. In order
+              // to see anything on the screen, we use the QuadRenderer instance. The upper half
+              // of the screen shows an intermediate HDR buffer, and the lower part displays the final image:
               multiRenderer(ctx_, sceneData, "data/shaders/07/VK01.vert", "data/shaders/08/VK03_scene_IBL.frag", {HDRLuminance, HDRDepth}, ctx_.resources.addRenderPass({HDRLuminance, HDRDepth}, RenderPassCreateInfo{.clearColor_ = false, .clearDepth_ = false, .flags_ = eRenderPassBit_Offscreen})),
 
               // tone mapping (gamma correction / exposure)
