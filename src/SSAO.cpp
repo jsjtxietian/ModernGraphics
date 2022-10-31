@@ -1,3 +1,4 @@
+#if 0
 // Screen Space Ambient Occlusion (SSAO) is an image-based technique to roughly
 // approximate global illumination in real time. Ambient occlusion itself is a very crude
 // approximation of global illumination. It can be thought of as the amount of open "sky"
@@ -113,3 +114,5 @@ int main()
     app.mainLoop();
     return 0;
 }
+
+#endif
