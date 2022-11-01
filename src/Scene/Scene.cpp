@@ -299,6 +299,7 @@ void printChangedNodes(const Scene &scene)
 }
 
 // Shift all hierarchy components in the nodes
+// increments individual fields of the Hierarchy structure by the given amount:
 void shiftNodes(Scene &scene, int startOffset, int nodeCount, int shiftAmount)
 {
     auto shiftNode = [shiftAmount](Hierarchy &node)
@@ -327,6 +328,7 @@ void shiftNodes(Scene &scene, int startOffset, int nodeCount, int shiftAmount)
 using ItemMap = std::unordered_map<uint32_t, uint32_t>;
 
 // Add the items from otherMap shifting indices and values along the way
+// adds the otherMap collection to the m output map and shifts item indices by specified amounts:
 void mergeMaps(ItemMap &m, const ItemMap &otherMap, int indexOffset, int itemOffset)
 {
     for (const auto &i : otherMap)
@@ -339,7 +341,15 @@ void mergeMaps(ItemMap &m, const ItemMap &otherMap, int indexOffset, int itemOff
     The second one is creating a "grid" of objects (or scenes) with the same material and mesh sets.
     For the second use case we need two flags: 'mergeMeshes' and 'mergeMaterials' to avoid shifting mesh indices
 */
-void mergeScenes(Scene &scene, const std::vector<Scene *> &scenes, const std::vector<glm::mat4> &rootTransforms, const std::vector<uint32_t> &meshCounts,
+// creates a new scene node named "NewRoot"
+// and adds all the root scene nodes from the list to the new scene as children of the
+// "NewRoot" node. In the accompanying source-code bundle, this routine has
+// two more parameters, mergeMeshes and mergeMaterials, which allow the
+// creation of composite scenes with shared mesh and material data. We omit these
+// non-essential parameters to shorten the description:
+
+void mergeScenes(Scene &scene, const std::vector<Scene *> &scenes,
+                 const std::vector<glm::mat4> &rootTransforms, const std::vector<uint32_t> &meshCounts,
                  bool mergeMeshes, bool mergeMaterials)
 {
     // Create new root node
@@ -350,6 +360,7 @@ void mergeScenes(Scene &scene, const std::vector<Scene *> &scenes, const std::ve
          .lastSibling_ = -1,
          .level_ = 0}};
 
+    // Name and transform arrays initially contain a single element, "NewRoot":
     scene.nameForNode_[0] = 0;
     scene.names_ = {"NewRoot"};
 
@@ -359,6 +370,8 @@ void mergeScenes(Scene &scene, const std::vector<Scene *> &scenes, const std::ve
     if (scenes.empty())
         return;
 
+    // While iterating the scenes, we merge and shift all the arrays and maps. The next few
+    // variables keep track of item counts in the output scene:
     int offs = 1;
     int meshOffs = 0;
     int nameOffs = (int)scene.names_.size();
@@ -368,6 +381,8 @@ void mergeScenes(Scene &scene, const std::vector<Scene *> &scenes, const std::ve
     if (!mergeMaterials)
         scene.materialNames_ = scenes[0]->materialNames_;
 
+    // This implementation is not the best possible one, not least because we risk merging
+    // all the scene-graph components in a single routine:
     // FIXME: too much logic (for all the components in a scene, though mesh data and materials go separately - there are dedicated data lists)
     for (const Scene *s : scenes)
     {
@@ -388,6 +403,7 @@ void mergeScenes(Scene &scene, const std::vector<Scene *> &scenes, const std::ve
         mergeMaps(scene.materialForNode_, s->materialForNode_, offs, mergeMaterials ? materialOfs : 0);
         mergeMaps(scene.nameForNode_, s->nameForNode_, offs, nameOffs);
 
+        // At each iteration, we add the sizes of the current arrays to global offsets:
         offs += nodeCount;
 
         materialOfs += (int)s->materialNames_.size();
@@ -400,6 +416,10 @@ void mergeScenes(Scene &scene, const std::vector<Scene *> &scenes, const std::ve
         }
     }
 
+    // Logically, the routine is complete, but there is one more step to perform. Each scene
+    // node contains a cached index of the last sibling node, which we have to set for the
+    // new root nodes. Each root node can now have a new local transform, which we set
+    // in the following loop:
     // fixing 'nextSibling' fields in the old roots (zero-index in all the scenes)
     offs = 1;
     int idx = 0;
@@ -421,6 +441,8 @@ void mergeScenes(Scene &scene, const std::vector<Scene *> &scenes, const std::ve
         idx++;
     }
 
+    // At the end of the routine, we should increment all the levels of the scene nodes but
+    // leave the "NewRoot" node untouched—hence, +1:
     // now shift levels of all nodes below the root
     for (auto i = scene.hierarchy_.begin() + 1; i != scene.hierarchy_.end(); i++)
         i->level_++;

@@ -9,6 +9,7 @@ std::string readShaderFile(const char *fileName);
 void printShaderSource(const char *text);
 int endsWith(const char *s, const char *part);
 
+// a templated one-liner that appends the second vector, v2, to the end of the first one, v1:
 template <typename T>
 inline void mergeVectors(std::vector<T> &v1, const std::vector<T> &v2)
 {

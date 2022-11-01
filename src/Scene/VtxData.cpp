@@ -10,7 +10,7 @@ MeshFileHeader loadMeshData(const char *meshFile, MeshData &out)
 
 	FILE *f = fopen(meshFile, "rb");
 
-	assert(f); 
+	assert(f);
 	if (!f)
 	{
 		printf("Cannot open %s. Did you forget to run \"MeshConverter\"?\n", meshFile);
@@ -108,7 +108,13 @@ void loadBoundingBoxes(const char *fileName, std::vector<BoundingBox> &boxes)
 	fclose(f);
 }
 
+// Since each MeshData structure contains an array of triangle indices and an interleaved
+// array of vertex attributes, the merging procedure consists of copying input MeshData
+// instances to a single array and modifying index-data offsets.
+
 // Combine a list of meshes to a single mesh container
+// The mergeMeshData() routine takes a list of MeshData instances and creates
+// a new file header while simultaneously copying all the indices and vertices to the output object:
 MeshFileHeader mergeMeshData(MeshData &m, const std::vector<MeshData *> md)
 {
 	uint32_t totalVertexDataSize = 0;
@@ -122,8 +128,14 @@ MeshFileHeader mergeMeshData(MeshData &m, const std::vector<MeshData *> md)
 		mergeVectors(m.meshes_, i->meshes_);
 		mergeVectors(m.boxes_, i->boxes_);
 
-		uint32_t vtxOffset = totalVertexDataSize / 8; /* 8 is the number of per-vertex attributes: position, normal + UV */
+		// Each index must be shifted by the current size of the m.vertexData_ array. The
+		// "magic" number—8—here is the sum of 3 vertex position components, 3 normal
+		// vector components, and 2 texture coordinates:
 
+		uint32_t vtxOffset = totalVertexDataSize / 8;
+
+		// After merging the index and vertex data along with the auxiliary precalculated
+		// bounding boxes, shift each index by the total size of the merged index array:
 		for (size_t j = 0; j < (uint32_t)i->meshes_.size(); j++)
 			// m.vertexCount, m.lodCount and m.streamCount do not change
 			// m.vertexOffset also does not change, because vertex offsets are local (i.e., baked into the indices)
@@ -133,12 +145,14 @@ MeshFileHeader mergeMeshData(MeshData &m, const std::vector<MeshData *> md)
 		for (size_t j = 0; j < i->indexData_.size(); j++)
 			m.indexData_[totalIndexDataSize + j] += vtxOffset;
 
+		// At each iteration, increment global offsets in the mesh, index, and vertex arrays:
 		offs += (uint32_t)i->meshes_.size();
 
 		totalIndexDataSize += (uint32_t)i->indexData_.size();
 		totalVertexDataSize += (uint32_t)i->vertexData_.size();
 	}
 
+	// The resulting mesh file header contains the total size of index and vertex data arrays:
 	return MeshFileHeader{
 		.magicValue = 0x12345678,
 		.meshCount = (uint32_t)offs,

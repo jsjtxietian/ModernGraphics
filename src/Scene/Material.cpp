@@ -48,7 +48,7 @@ void saveMaterials(const char *fileName, const std::vector<MaterialDescription> 
     fclose(f);
 }
 
-// reads a list of materials from file. 
+// reads a list of materials from file.
 void loadMaterials(const char *fileName, std::vector<MaterialDescription> &materials, std::vector<std::string> &files)
 {
     FILE *f = fopen(fileName, "rb");
@@ -67,6 +67,7 @@ void loadMaterials(const char *fileName, std::vector<MaterialDescription> &mater
     fclose(f);
 }
 
+// creates a single texture filenames list and a material description list with correct texture indices:
 void mergeMaterialLists(
     const std::vector<std::vector<MaterialDescription> *> &oldMaterials,
     const std::vector<std::vector<std::string> *> &oldTextures,
@@ -91,6 +92,8 @@ void mergeMaterialLists(
     }
 
     // Create one combined texture list
+    // The newTextures global texture array contains only unique filenames. Indices of
+    // texture files are stored in a map to fix the values in material descriptors below them:
     for (const std::vector<std::string> *tl : oldTextures)
         for (const std::string &file : *tl)
         {
@@ -98,6 +101,8 @@ void mergeMaterialLists(
         }
 
     // Lambda to replace textureID by a new "version" (from global list)
+    // The replaceTexture() lambda takes a texture index from a local texture array
+    // and assigns a global texture index from the newTextures array:
     auto replaceTexture = [&materialToTextureList, &oldTextures, &newTextureNames](int m, uint64_t *textureID)
     {
         if (*textureID < INVALID_TEXTURE)
@@ -109,6 +114,7 @@ void mergeMaterialLists(
         }
     };
 
+    // The final loop goes over all materials and adjusts the texture indices accordingly:
     for (size_t i = 0; i < allMaterials.size(); i++)
     {
         auto &m = allMaterials[i];

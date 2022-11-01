@@ -2,7 +2,7 @@
 // Our texture conversion code goes through all the textures, downscales them to 512x512
 // where necessary, and saves them in RGBA .png files. In a real-world content pipeline,
 // this conversion process may include a texture compression phase.
-    
+
 #include <algorithm>
 #include <execution>
 #include <fstream>
@@ -754,6 +754,68 @@ void processScene(const SceneConfig &cfg)
     saveScene(cfg.outputScene.c_str(), ourScene);
 }
 
+// Merge meshes (interior/exterior)
+void mergeBistro()
+{
+    Scene scene1, scene2;
+    std::vector<Scene *> scenes = {&scene1, &scene2};
+
+    MeshData m1, m2;
+    MeshFileHeader header1 = loadMeshData("data/meshes/test.meshes", m1);
+    MeshFileHeader header2 = loadMeshData("data/meshes/test2.meshes", m2);
+
+    std::vector<uint32_t> meshCounts = {header1.meshCount, header2.meshCount};
+
+    loadScene("data/meshes/test.scene", scene1);
+    loadScene("data/meshes/test2.scene", scene2);
+
+    Scene scene;
+    mergeScenes(scene, scenes, {}, meshCounts);
+
+    MeshData meshData;
+    std::vector<MeshData *> meshDatas = {&m1, &m2};
+
+    // Once we have loaded all the mesh data, we create an aggregate MeshData object.
+    // Material data is also loaded and merged, similar to the mesh data:
+    MeshFileHeader header = mergeMeshData(meshData, meshDatas);
+
+    // now the material lists:
+    std::vector<MaterialDescription> materials1, materials2;
+    std::vector<std::string> textureFiles1, textureFiles2;
+    loadMaterials("data/meshes/test.materials", materials1, textureFiles1);
+    loadMaterials("data/meshes/test2.materials", materials2, textureFiles2);
+
+    std::vector<MaterialDescription> allMaterials;
+    std::vector<std::string> allTextures;
+
+    // A global material list is created with the mergeMaterialLists() function described previously:
+    mergeMaterialLists(
+        {&materials1, &materials2},
+        {&textureFiles1, &textureFiles2},
+        allMaterials, allTextures);
+
+    saveMaterials("data/meshes/bistro_all.materials", allMaterials, allTextures);
+
+    // Our scene contains a leafy tree object in the backyard. Just by inspecting the
+    // source mesh files, we can easily find out the names of materials for the meshes to
+    // be merged. Green and orange leaves constitute almost two-thirds of the total mesh
+    // count in the combined scene, so they are merged into two large meshes. The trunk
+    // is almost 1,000 meshes, so we merge it as well:
+    printf("[Unmerged] scene items: %d\n", (int)scene.hierarchy_.size());
+    mergeScene(scene, meshData, "Foliage_Linde_Tree_Large_Orange_Leaves");
+    printf("[Merged orange leaves] scene items: %d\n", (int)scene.hierarchy_.size());
+    mergeScene(scene, meshData, "Foliage_Linde_Tree_Large_Green_Leaves");
+    printf("[Merged green leaves]  scene items: %d\n", (int)scene.hierarchy_.size());
+    mergeScene(scene, meshData, "Foliage_Linde_Tree_Large_Trunk");
+    printf("[Merged trunk]  scene items: %d\n", (int)scene.hierarchy_.size());
+
+    // Following the modification, we have our bounding-box array broken, so we call the calculation routine.
+    recalculateBoundingBoxes(meshData);
+
+    saveMeshData("data/meshes/bistro_all.meshes", meshData);
+    saveScene("data/meshes/bistro_all.scene", scene);
+}
+
 int main()
 {
     fs::create_directory("data/out_textures");
@@ -764,7 +826,7 @@ int main()
         processScene(cfg);
 
     // Final step: optimize bistro scene
-    // mergeBistro();
+    mergeBistro();
 
     return 0;
 }
