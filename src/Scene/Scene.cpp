@@ -459,7 +459,10 @@ void dumpSceneToDot(const char *fileName, const Scene &scene, int *visited)
 /** A rather long algorithm (and the auxiliary routines) to delete a number of scene nodes from the hierarchy */
 /* */
 
-// Add an index to a sorted index array
+// Add an index to a sorted index array, avoids adding items twice:
+// One subtle requirement here is that the array is sorted. When all the children come
+// strictly after their parents, this is not a problem. Otherwise, std::find() should
+// be used, which naturally increases the runtime cost of the algorithm.
 static void addUniqueIdx(std::vector<uint32_t> &v, uint32_t index)
 {
     if (!std::binary_search(v.begin(), v.end(), index))
@@ -467,6 +470,10 @@ static void addUniqueIdx(std::vector<uint32_t> &v, uint32_t index)
 }
 
 // Recurse down from a node and collect all nodes which are already marked for deletion
+// When we want to delete one node, all its children
+// must also be marked for deletion. We collect all the nodes to be deleted with the
+// following recursive routine. To do this, we iterate all the children,, while traversing a scene graph.
+// Each iterated index is added to the array:
 static void collectNodesToDelete(const Scene &scene, int node, std::vector<uint32_t> &nodes)
 {
     for (int n = scene.hierarchy_[node].firstChild_; n != -1; n = scene.hierarchy_[n].nextSibling_)
@@ -476,6 +483,9 @@ static void collectNodesToDelete(const Scene &scene, int node, std::vector<uint3
     }
 }
 
+// returns a deleted node replacement index:
+// If the input is empty, no replacement is necessary. If we have no replacement for the
+// node, we recurse to the next sibling of the deleted node.
 int findLastNonDeletedItem(const Scene &scene, const std::vector<int> &newIndices, int node)
 {
     // we have to be more subtle:
@@ -487,6 +497,7 @@ int findLastNonDeletedItem(const Scene &scene, const std::vector<int> &newIndice
     return (newIndices[node] == -1) ? findLastNonDeletedItem(scene, newIndices, scene.hierarchy_[node].nextSibling_) : newIndices[node];
 }
 
+// replaces the pair::second value in each map's item:
 void shiftMapIndices(std::unordered_map<uint32_t, uint32_t> &items, const std::vector<int> &newIndices)
 {
     std::unordered_map<uint32_t, uint32_t> newItems;
@@ -499,10 +510,14 @@ void shiftMapIndices(std::unordered_map<uint32_t, uint32_t> &items, const std::v
     items = newItems;
 }
 
+// The deleteSceneNodes() routine allows us to compress and optimize a scene graph
+// while merging multiple meshes with the same material.
 // Approximately an O ( N * Log(N) * Log(M)) algorithm (N = scene.size, M = nodesToDelete.size) to delete a collection of nodes from scene graph
 void deleteSceneNodes(Scene &scene, const std::vector<uint32_t> &nodesToDelete)
 {
     // 0) Add all the nodes down below in the hierarchy
+    // starts by adding all child nodes to the deleted nodes list.
+    // To keep track of moved nodes, we create a nodes linear list of indices, starting at 0:
     auto indicesToDelete = nodesToDelete;
     for (auto i : indicesToDelete)
         collectNodesToDelete(scene, i, indicesToDelete);
@@ -512,6 +527,9 @@ void deleteSceneNodes(Scene &scene, const std::vector<uint32_t> &nodesToDelete)
     std::iota(nodes.begin(), nodes.end(), 0);
 
     // 1.a) Move all the indicesToDelete to the end of 'nodes' array (and cut them off, a variation of swap'n'pop for multiple elements)
+    // Afterward, we remember the source node count and remove all the indices from
+    // our linear index list. To fix the child node indices, we create a linear mapping table
+    // from old node indices to the new ones:
     auto oldSize = nodes.size();
     eraseSelected(nodes, indicesToDelete);
 
@@ -521,6 +539,9 @@ void deleteSceneNodes(Scene &scene, const std::vector<uint32_t> &nodesToDelete)
         newIndices[nodes[i]] = i;
 
     // 2) Replace all non-null parent/firstChild/nextSibling pointers in all the nodes by new positions
+    // Before deleting nodes from the hierarchy array, we remap all node indices. The
+    // following lambda modifies a single Hierarchy item by finding the non-null node
+    // in the newIndices container:
     auto nodeMover = [&scene, &newIndices](Hierarchy &h)
     {
         return Hierarchy{
@@ -529,6 +550,10 @@ void deleteSceneNodes(Scene &scene, const std::vector<uint32_t> &nodesToDelete)
             .nextSibling_ = findLastNonDeletedItem(scene, newIndices, h.nextSibling_),
             .lastSibling_ = findLastNonDeletedItem(scene, newIndices, h.lastSibling_)};
     };
+
+    // The std::transform() algorithm modifies all the nodes in the hierarchy.
+    // After fixing node indices, we are ready to actually delete data. Three calls to
+    // eraseSelected() throw away the unused hierarchy and transformation items:
     std::transform(scene.hierarchy_.begin(), scene.hierarchy_.end(), scene.hierarchy_.begin(), nodeMover);
 
     // 3) Finally throw away the hierarchy items
@@ -541,6 +566,8 @@ void deleteSceneNodes(Scene &scene, const std::vector<uint32_t> &nodesToDelete)
     eraseSelected(scene.globalTransform_, indicesToDelete);
 
     // 4b) All the maps should change the key values with the newIndices[] array
+    // Finally, we need to adjust the indices in mesh, material, and name maps. For this,
+    // we use the shiftMapIndices() function shown here:
     shiftMapIndices(scene.meshes_, newIndices);
     shiftMapIndices(scene.materialForNode_, newIndices);
     shiftMapIndices(scene.nameForNode_, newIndices);

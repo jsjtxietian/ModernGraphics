@@ -34,6 +34,17 @@ inline int addUnique(std::vector<std::string> &files, const std::string &file)
 
 // From https://stackoverflow.com/a/64152990/1182653
 // Delete a list of items from std::vector with indices in 'selection'
+
+// The function "chops off" the elements moved to the end of the vector by using
+// vector::resize(). The exact number of items to retain is calculated as a
+// distance from the start of the array to the iterator returned by the stable_
+// partition() function. The std::stable_partition() algorithm takes
+// a lambda function that checks whether the element should be moved to the end
+// of the array. In our case, this lambda function checks whether the item is in the
+// selection container passed as an argument. The "usual" way to find an item
+// index in the array is to use std::distance() and std::find(), but we can
+// also resort to good old pointer arithmetic, as the container is tightly packed.
+
 template <class T, class Index = int>
 inline void eraseSelected(std::vector<T> &v, const std::vector<Index> &selection)
 // e.g., eraseSelected({1, 2, 3, 4, 5}, {1, 3})  ->   {1, 3, 5}
