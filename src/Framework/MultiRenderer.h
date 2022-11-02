@@ -1,3 +1,5 @@
+//  Advanced Scenegraph Rendering Pipeline presentation by Markus Tavenrath and Christoph Kubisch from NVIDIA
+
 #pragma once
 
 #include "Renderer.h"
@@ -7,9 +9,19 @@
 
 #include <taskflow/taskflow.hpp>
 
+// A single instance of VKSceneData can be
+// shared between multiple renderers to simplify multipass rendering techniques
+// The input scene contains the linearized scene graph in
+// the format of our scene-converter tool. A linear list of packed material data is stored
+// in a separate file, which is also written by the SceneConverter tool. Environment
+// and irradiance maps are passed from an external context because they can be shared
+// with other renderers:
+
 // Container of mesh data, material data and scene nodes with transformations
 struct VKSceneData
 {
+	// uses our new resources management scheme to load all the scene data.
+	// The mesh file contains vertex and index buffers for all geometry in the scene.
 	VKSceneData(VulkanRenderContext &ctx,
 				const char *meshFile,
 				const char *sceneFile,

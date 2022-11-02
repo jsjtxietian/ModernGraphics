@@ -42,10 +42,20 @@ VKSceneData::VKSceneData(VulkanRenderContext &ctx,
 						 bool asyncLoad)
 	: ctx(ctx), envMapIrradiance_(irradianceMap), envMap_(envMap)
 {
+	// The bidirectional reflective distribution function (BRDF) lookup table (LUT)
+	// required for the PBR shading model is loaded first. After the LUT, we load material
+	// data and a complete list of texture files used in all materials:
 	brdfLUT_ = ctx.resources.loadKTX("data/brdfLUT.ktx");
 
 	loadMaterials(materialFile, materials_, textureFiles_);
 
+	// we might have used std::transform with the parallel execution policy to
+	// allow the multithreaded loading of texture data. This would require some locking
+	// in the VulkanResources::loadTexture2D() method and might give a
+	// considerable speed-up because the majority of the loading code is context-free and
+	// should easily run in parallel. However, we have not implemented this approach
+	// because we still have to load all the textures right here. A real-world solution would be
+	// the deferred loading and asynchronous update of textures as soon as they are loaded:
 	std::vector<VulkanTexture> textures;
 	for (const auto &f : textureFiles_)
 	{
@@ -75,6 +85,8 @@ VKSceneData::VKSceneData(VulkanRenderContext &ctx,
 
 	allMaterialTextures = fsTextureArrayAttachment(textures);
 
+	// Our material data is tightly packed, so after loading it from a file, we create a GPU
+	// storage buffer and upload the materials list without any conversions:
 	const uint32_t materialsSize = static_cast<uint32_t>(sizeof(MaterialDescription) * materials_.size());
 	material_ = ctx.resources.addStorageBuffer(materialsSize);
 	uploadBufferData(ctx.vkDev, material_.memory, 0, materials_.data(), materialsSize);
@@ -83,6 +95,9 @@ VKSceneData::VKSceneData(VulkanRenderContext &ctx,
 	loadScene(sceneFile);
 }
 
+// After loading, vertices and indices are
+// uploaded into a single buffer. The actual code is slightly more involved because
+// Vulkan requires sub-buffer offsets to be a multiple of the minimum alignment value.
 void VKSceneData::loadMeshes(const char *meshFile)
 {
 	MeshFileHeader header = loadMeshData(meshFile, meshData_);
@@ -107,6 +122,9 @@ void VKSceneData::loadMeshes(const char *meshFile)
 	indexBuffer_ = BufferAttachment{.dInfo = {.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .shaderStageFlags = VK_SHADER_STAGE_VERTEX_BIT}, .buffer = storage, .offset = vertexBufferSize, .size = indexBufferSize};
 }
 
+// uses the global scene loader. The bulk of the method
+// converts scene nodes with attached meshes to a list of indirect draw structures. For
+// nodes without meshes or materials, no renderable items are generated:
 void VKSceneData::loadScene(const char *sceneFile)
 {
 	::loadScene(sceneFile, scene_);
@@ -118,6 +136,8 @@ void VKSceneData::loadScene(const char *sceneFile)
 		if (material == scene_.materialForNode_.end())
 			continue;
 
+		// we also store material indices.
+		// the next line binds our scene node's global transform to the GPU-drawable element: a shape.
 		shapes_.push_back(
 			DrawData{
 				.meshIndex = c.second,
@@ -128,6 +148,8 @@ void VKSceneData::loadScene(const char *sceneFile)
 				.transformIndex = c.first});
 	}
 
+	// After the shape list has been created, we allocate a GPU buffer for all global
+	// transformations and recalculate all these transformations:
 	shapeTransforms_.resize(shapes_.size());
 	transforms_ = ctx.resources.addStorageBuffer(shapes_.size() * sizeof(glm::mat4));
 
