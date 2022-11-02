@@ -162,6 +162,7 @@ void VKSceneData::updateMaterial(int matIdx)
 	uploadBufferData(ctx.vkDev, material_.memory, matIdx * sizeof(MaterialDescription), materials_.data() + matIdx, sizeof(MaterialDescription));
 }
 
+// fetches current global node transformations and assigns them to the appropriate shapes:
 void VKSceneData::convertGlobalToShapeTransforms()
 {
 	// fill the shapeTransforms_ array from globalTransforms_
@@ -170,6 +171,7 @@ void VKSceneData::convertGlobalToShapeTransforms()
 		shapeTransforms_[i++] = scene_.globalTransform_[c.transformIndex];
 }
 
+// recalculates all the global transformations after marking each node as changed:
 void VKSceneData::recalculateAllTransforms()
 {
 	// force recalculation of global transformations
@@ -177,6 +179,7 @@ void VKSceneData::recalculateAllTransforms()
 	recalculateGlobalTransforms(scene_);
 }
 
+// fetches global shape transforms from the node transform list and immediately uploads these transforms to the GPU buffer:
 void VKSceneData::uploadGlobalTransforms()
 {
 	convertGlobalToShapeTransforms();
@@ -194,10 +197,15 @@ MultiRenderer::MultiRenderer(
 	const std::vector<TextureAttachment> &auxTextures)
 	: Renderer(ctx), sceneData_(sceneData)
 {
+	// initialize the rendering pass and frame buffer. The
+	// shape and indirect buffers both depend on the shape list element count, but have
+	// different item sizes:
 	const PipelineInfo pInfo = initRenderPass(PipelineInfo{}, outputs, screenRenderPass, ctx.screenRenderPass);
 
 	const uint32_t indirectDataSize = (uint32_t)sceneData_.shapes_.size() * sizeof(VkDrawIndirectCommand);
 
+	// All the containers with per-frame GPU buffers and descriptor sets are resized to
+	// match the number of images in a swapchain:
 	const size_t imgCount = ctx.vkDev.swapchainImages.size();
 	uniforms_.resize(imgCount);
 	shape_.resize(imgCount);
@@ -206,9 +214,16 @@ MultiRenderer::MultiRenderer(
 	descriptorSets_.resize(imgCount);
 
 	const uint32_t shapesSize = (uint32_t)sceneData_.shapes_.size() * sizeof(DrawData);
+
+	// The uniform buffer layout is somewhat hardcoded here—an interested reader may
+	// change the code to pass this value into a constructor's parameter:
 	const uint32_t uniformBufferSize = sizeof(ubo_);
 
+	// The shaders use three predefined textures from the VKSceneData class. All the
+	// material-related textures reside in a separate texture array:
 	std::vector<TextureAttachment> textureAttachments;
+	// The array is filled with push_back, but the real code also checks for textures to
+	// have non-zero width:
 	if (sceneData_.envMap_.width)
 		textureAttachments.push_back(fsTextureAttachment(sceneData_.envMap_));
 	if (sceneData_.envMapIrradiance_.width)
@@ -234,6 +249,8 @@ MultiRenderer::MultiRenderer(
 	for (const auto &b : auxBuffers)
 		dsInfo.buffers.push_back(b);
 
+	// After allocating the descriptor-set layout and descriptor pool, we create per-frame
+	// indirect and uniform buffers:
 	descriptorSetLayout_ = ctx.resources.addDescriptorSetLayout(dsInfo);
 	descriptorPool_ = ctx.resources.addDescriptorPool(dsInfo, (uint32_t)imgCount);
 
@@ -253,9 +270,12 @@ MultiRenderer::MultiRenderer(
 		ctx.resources.updateDescriptorSet(descriptorSets_[i], dsInfo);
 	}
 
+	// The final step in initialization is pipeline creation with the user-specified shader stages:
 	initPipeline({vertShaderFile, fragShaderFile}, pInfo);
 }
 
+// the entire loaded scene is rendered while a single indirect draw
+// command is executed on the Vulkan graphics queue:
 void MultiRenderer::fillCommandBuffer(VkCommandBuffer commandBuffer, size_t currentImage, VkFramebuffer fb, VkRenderPass rp)
 {
 	beginRenderPass((rp != VK_NULL_HANDLE) ? rp : renderPass_.handle, (fb != VK_NULL_HANDLE) ? fb : framebuffer_, commandBuffer, currentImage);
@@ -275,9 +295,11 @@ void MultiRenderer::updateBuffers(size_t imageIndex)
 
 void MultiRenderer::updateIndirectBuffers(size_t currentImage, bool *visibility)
 {
+	// The indirect command buffer is updated using a local memory mapping:
 	VkDrawIndirectCommand *data = nullptr;
 	vkMapMemory(ctx_.vkDev.device, indirect_[currentImage].memory, 0, sizeof(VkDrawIndirectCommand), 0, (void **)&data);
 
+	// Each of the shapes in a scene gets its own draw command:
 	const uint32_t size = (uint32_t)sceneData_.shapes_.size();
 
 	for (uint32_t i = 0; i != size; i++)
@@ -285,9 +307,16 @@ void MultiRenderer::updateIndirectBuffers(size_t currentImage, bool *visibility)
 		const uint32_t j = sceneData_.shapes_[i].meshIndex;
 
 		const uint32_t lod = sceneData_.shapes_[i].LOD;
+
+		// The draw command extracts a vertex count from the LOD information of this
+		// shape. If we have CPU-generated visibility information, we may set the instance
+		// count to 0. This will be used in the next chapter to implement frustum culling on the CPU:
 		data[i] = {
 			.vertexCount = sceneData_.meshData_.meshes_[j].getLODIndicesCount(lod),
 			.instanceCount = visibility ? (visibility[i] ? 1u : 0u) : 1u,
+			// Each rendering command here starts with a 0-th vertex.
+			// The first instance value is set to be the
+			// current shape's index, and it is handled in the GLSL shader manually:
 			.firstVertex = 0,
 			.firstInstance = i};
 	}
