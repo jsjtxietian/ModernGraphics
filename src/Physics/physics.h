@@ -27,6 +27,7 @@ using glm::vec4;
 
 #include "Utils/UtilsMath.h"
 
+// calls the appropriate libBullet methods to create, manage, and update physical objects:
 struct Physics
 {
 	Physics() : collisionDispatcher(&collisionConfiguration),
@@ -40,6 +41,7 @@ struct Physics
 
 	void addBox(const vec3 &halfSize, const btQuaternion &orientation, const vec3 &position, float mass);
 
+	// The synchronization point with our rendering framework is the update() method.
 	void update(float deltaSeconds);
 
 	std::vector<mat4> boxTransform;

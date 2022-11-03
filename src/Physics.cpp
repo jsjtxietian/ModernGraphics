@@ -26,6 +26,7 @@ struct MyApp : public CameraApp
             physics.addBox(vec3(1), btQuaternion(0, 0, 0, 1), vec3(0.f, 2.f + 3.f * i, 0.f), 3.f);
     }
 
+    // overrides global transformations for simulated nodes.
     void draw3D() override
     {
         const mat4 p = getDefaultProjection();
