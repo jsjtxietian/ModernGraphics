@@ -56,7 +56,7 @@ include_directories(3rdparty/imgui)
 
 #imguizmo
 include_directories(3rdparty/ImGuizmo)
-add_subdirectory(3rdparty/ImGuizmo)
+add_subdirectory(3rdparty/cmake/ImGuizmo)
 
 #rapidjson
 include_directories(3rdparty/rapidjson/include)
@@ -85,6 +85,10 @@ if(BUILD_WITH_OPTICK)
     add_subdirectory(3rdparty/optick)
 	set_property(TARGET OptickCore PROPERTY FOLDER "ThirdPartyLibraries")
 endif()
+
+#bullet
+include_directories(3rdparty/bullet/src)
+add_subdirectory(3rdparty/cmake/bullet)
 
 #assimp
 set(ASSIMP_NO_EXPORT ON CACHE BOOL "")
@@ -171,7 +175,7 @@ endif()
 
 
 
-target_link_libraries(SampleTest glad glfw volk glslang SPIRV assimp ImGuizmo)
+target_link_libraries(SampleTest glad glfw volk glslang SPIRV assimp ImGuizmo Bullet)
 
 
 if(BUILD_WITH_EASY_PROFILER)
