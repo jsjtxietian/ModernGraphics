@@ -1,3 +1,5 @@
+#if 0
+
 // https://en.wikipedia.org/wiki/Bloom_(shader_effect)
 
 // Strictly speaking, applying a tone-mapping operator directly to RGB channel values is very
@@ -228,3 +230,5 @@ int main()
     app.mainLoop();
     return 0;
 }
+
+#endif
