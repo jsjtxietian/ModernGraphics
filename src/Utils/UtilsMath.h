@@ -96,6 +96,8 @@ inline glm::vec3 randVec()
 	return randomVec(glm::vec3(-5, -5, -5), glm::vec3(5, 5, 5));
 }
 
+// By default, GLM uses a right-handed coordinate system. This way, six frustum planes
+// are extracted from the transposed, pre-multiplied view-projection matrix, vp:
 inline void getFrustumPlanes(glm::mat4 mvp, glm::vec4 *planes)
 {
 	using glm::vec4;
@@ -109,6 +111,9 @@ inline void getFrustumPlanes(glm::mat4 mvp, glm::vec4 *planes)
 	planes[5] = vec4(mvp[3] - mvp[2]); // far
 }
 
+// The eight frustum corner points can be produced by taking a unit cube and
+// transforming it with the inverse of the pre-multiplied view-projection matrix and
+// performing perspective division:
 inline void getFrustumCorners(glm::mat4 mvp, glm::vec4 *points)
 {
 	using glm::vec4;
@@ -128,6 +133,7 @@ inline void getFrustumCorners(glm::mat4 mvp, glm::vec4 *points)
 	}
 }
 
+// check if a bounding box is fully outside any of the six frustum planes:
 inline bool isBoxInFrustum(glm::vec4 *frustumPlanes, glm::vec4 *frustumCorners, const BoundingBox &box)
 {
 	using glm::dot;
