@@ -1,3 +1,5 @@
+#if 0
+
 #include "Framework/VulkanApp.h"
 #include "Framework/GuiRenderer.h"
 #include "Framework/MultiRenderer.h"
@@ -107,3 +109,5 @@ int main()
     app.mainLoop();
     return 0;
 }
+
+#endif
