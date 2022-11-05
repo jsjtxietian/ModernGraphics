@@ -137,6 +137,27 @@ struct TransparentFragment
 	but it also would require a few more barrier classes, so we opted for a straight-forward solution
 	similar to a list of OpenGL commands
 */
+
+// Alpha blending multiple surfaces is an operation that requires all transparent surfaces to be
+// sorted back to front. There are multiple ways to do this, such as sorting scene objects back
+// to front, using multiple pass depth peeling techniques (https://matthewwellings.
+// com/blog/depth-peeling-order-independent-transparency-in-
+// vulkan), making order-independent approximations (http://casual-effects.
+// blogspot.com/2014/03/weighted-blended-order-independent.html),
+// and following a more recent work called Phenomenological Transparency by Morgan
+// McGuire and Michael Mara (https://research.nvidia.com/publication/
+// phenomenological-transparency).
+// Starting from OpenGL 4.2, it is possible to implement order-independent transparency
+// using per-pixel linked lists via atomic counters and load-store-atomic read-modify-write
+// operations on textures. This method is order-independent, which means it does not require
+// any transparent geometry to be sorted prior to rendering. All necessary sorting happens
+// in a fragment shader at the pixel level, after the actual scene has been rendered. The idea
+// of the algorithm is to construct a linked list of fragments for each pixel of the screen,
+// which helps with storing the color and depth values at each node of the list. Once the
+// per-pixel lists have been constructed, we can sort them and blend them together using a
+// full-screen fragment shader. Essentially, this is a two-pass algorithm. Our implementation
+// is inspired by https://fr.slideshare.net/hgruen/oit-and-indirect-
+// illumination-using-dx11-linked-lists.
 struct FinalMultiRenderer : public Renderer
 {
 	FinalMultiRenderer(VulkanRenderContext &ctx, VKSceneData &sceneData, const std::vector<VulkanTexture> &outputs = std::vector<VulkanTexture>{})

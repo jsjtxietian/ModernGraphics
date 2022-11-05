@@ -1,8 +1,12 @@
-//
+// populating the linked lists.
 #version 460
 
 #extension GL_EXT_nonuniform_qualifier : require
 
+// The early_fragment_tests layout specifier states that we want to prevent
+// this fragment shader from being executed unnecessarily, should the fragment be
+// discarded based on the depth test. This is necessary, as any redundant invocation of
+// this shader will result in messed-up transparency lists.
 layout (early_fragment_tests) in;
 
 #include <data/shaders/07/VK01.h>
@@ -22,6 +26,7 @@ layout(binding = 4) readonly buffer MatBO  { MaterialData data[]; } mat_bo;
 
 layout(binding = 6) readonly buffer ShadowBO  { mat4 lightProj; mat4 lightView; uint width; uint height; } shadow_bo;
 
+// corresponds to the respective C++ structure.
 struct TransparentFragment {
 	vec4 color;
 	float depth;
@@ -45,6 +50,8 @@ layout(binding = 14) uniform sampler2D textures[];
 
 void main()
 {
+	// The main() function calculates perturbed normals and does simple image-based
+	// diffuse lighting using an irradiance map,
 	MaterialData md = mat_bo.data[matIdx];
 
 	vec4 emission = vec4(0,0,0,0); // md.emissiveColor_;
@@ -84,6 +91,7 @@ void main()
 
 	outColor = vec4(diffuse + colorRefl, 1.0);
 
+	// Once we have calculated the color value, we can insert this fragment into the corresponding linked list:
 	float alpha = clamp(albedo.a, 0.0, 1.0) * md.transparencyFactor_;
 	bool isTransparent = alpha < 0.99;
 	if (isTransparent && gl_HelperInvocation == false)

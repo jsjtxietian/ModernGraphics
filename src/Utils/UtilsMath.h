@@ -134,6 +134,8 @@ inline void getFrustumCorners(glm::mat4 mvp, glm::vec4 *points)
 }
 
 // check if a bounding box is fully outside any of the six frustum planes:
+// Whether something is "inside" or "outside" of a plane is determined by the
+// direction of its normal vector.
 inline bool isBoxInFrustum(glm::vec4 *frustumPlanes, glm::vec4 *frustumCorners, const BoundingBox &box)
 {
 	using glm::dot;
