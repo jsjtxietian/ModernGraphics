@@ -59,6 +59,7 @@ VKSceneData::VKSceneData(VulkanRenderContext &ctx,
 	std::vector<VulkanTexture> textures;
 	for (const auto &f : textureFiles_)
 	{
+		// replace each texture with a dummy and update the materials data using these textures
 		auto t = asyncLoad ? ctx.resources.addSolidRGBATexture() : ctx.resources.loadTexture2D(f.c_str());
 		textures.push_back(t);
 #if 0
@@ -69,6 +70,9 @@ VKSceneData::VKSceneData(VulkanRenderContext &ctx,
 
 	if (asyncLoad)
 	{
+		// create an independent asynchronous task for each texture file
+		// using the provided lambda. This lambda loads a texture from a file using the STB
+		// library and stores the loaded data in loadedFiles_
 		loadedFiles_.reserve(textureFiles_.size());
 
 		taskflow_.for_each_index(0u, (uint32_t)textureFiles_.size(), 1u, [this](int idx)
@@ -338,6 +342,8 @@ bool MultiRenderer::checkLoadedTextures()
 		sceneData_.loadedFiles_.pop_back();
 	}
 
+	// Once a new image data has been retrieved, we can create a new
+	// texture and update the materials accordingly:
 	this->updateTexture(data.index_, ctx_.resources.addRGBATexture(data.w_, data.h_, const_cast<uint8_t *>(data.img_)));
 
 	stbi_image_free((void *)data.img_);

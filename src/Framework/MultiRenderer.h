@@ -80,7 +80,7 @@ struct VKSceneData
 
 	void updateMaterial(int matIdx);
 
-	/* Chapter 9, async loading */
+	/* async loading */
 	struct LoadedImageData
 	{
 		int index_ = 0;
