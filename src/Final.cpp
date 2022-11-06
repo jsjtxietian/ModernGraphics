@@ -13,6 +13,9 @@ const uint32_t TEX_RGB = (0x2 << 16);
 
 #include <imgui/imgui_internal.h>
 
+// the light source direction can be controlled from ImGui using two angles, g_LightTheta and g_LightPhi:
+// https://www.cg.tuwien.ac.at/research/vr/lispsm
+// or Parallel Split Shadow Maps and Cascaded Shadow Maps algorithms
 float g_LightPhi = -15.0f;
 float g_LightTheta = +30.0f;
 
@@ -74,6 +77,12 @@ struct MyApp : public CameraApp
 
         onScreenRenderers_.emplace_back(canvas); // 10
 
+        // projective shadows for directional lights
+        // our scene is static, we can only do these calculations once outside the main loop.
+        // To construct a projection matrix for a directional light, we must calculate the axis-aligned
+        // bounding box of the entire scene, transform it into light-space using the light's view
+        // matrix, and use the bounds of the transformed box to construct an orthographic frustum
+        // that entirely encloses this box.
         {
             std::vector<BoundingBox> reorderedBoxes;
             reorderedBoxes.reserve(sceneData.shapes_.size());
@@ -86,6 +95,7 @@ struct MyApp : public CameraApp
                 reorderedBoxes.back().transform(model);
             }
 
+            // combine all the transformed bounding boxes into one big box:
             bigBox = reorderedBoxes.front();
             for (const auto &b : reorderedBoxes)
             {
@@ -227,11 +237,15 @@ struct MyApp : public CameraApp
         canvas.setCameraMatrix(p * view);
         canvas.clear();
 
+        // construct two rotation matrices using these two angles and rotate a vertical
+        // top-down light at (0, -1, 0) appropriately.
         const glm::mat4 rot1 = glm::rotate(mat4(1.f), glm::radians(g_LightTheta), glm::vec3(0, 0, 1));
         const glm::mat4 rot2 = glm::rotate(rot1, glm::radians(g_LightPhi), glm::vec3(1, 0, 0));
         vec3 lightDir = glm::normalize(vec3(rot2 * vec4(0.0f, -1.0f, 0.0f, 1.0f)));
         const mat4 lightView = glm::lookAt(glm::vec3(0.0f), lightDir, vec3(0, 0, 1));
 
+        // use this light's view matrix to transform the world-space bounding box
+        // of the scene into light-space.
         const BoundingBox box = bigBox.getTransformed(lightView);
         const mat4 lightProj = finalRenderer.enableShadows ? glm::ortho(box.min_.x, box.max_.x, box.min_.y, box.max_.y, -box.max_.z, -box.min_.z) : mat4(0.f);
 
