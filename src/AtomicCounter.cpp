@@ -1,3 +1,4 @@
+#if 0
 // introduce atomics in Vulkan and demonstrate how to use them
 // to see how the GPU scheduler distributes the fragment shader workload. In a sense, this
 // is the order in which the GPU rasterizes triangles into fragments on the screen.
@@ -177,3 +178,5 @@ int main()
     app.mainLoop();
     return 0;
 }
+
+#endif 

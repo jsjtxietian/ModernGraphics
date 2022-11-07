@@ -1,5 +1,9 @@
-#if 0
+// Various optimizations are possible here, such as tile deferred shading or clustered shading:
+// http://www.cse.chalmers.se/~uffe/clustered_shading_preprint.pdf
 
+// learn more about the practical side of PBR rendering, the documentation for the Filament
+// engine is an awesome source to explore: https://google.github.io/filament/
+// Filament.html.
 #include "Framework/VulkanApp.h"
 #include "Framework/GuiRenderer.h"
 #include "Framework/VKQuadRenderer.h"
@@ -320,5 +324,3 @@ int main()
     app.mainLoop();
     return 0;
 }
-
-#endif
