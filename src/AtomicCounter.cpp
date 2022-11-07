@@ -1,167 +1,179 @@
-// // introduce atomics in Vulkan and demonstrate how to use them
-// // to see how the GPU scheduler distributes the fragment shader workload. In a sense, this
-// // is the order in which the GPU rasterizes triangles into fragments on the screen.
+// introduce atomics in Vulkan and demonstrate how to use them
+// to see how the GPU scheduler distributes the fragment shader workload. In a sense, this
+// is the order in which the GPU rasterizes triangles into fragments on the screen.
 
-// #include "Framework/VulkanApp.h"
-// #include "Framework/LineCanvas.h"
-// #include "Framework/GuiRenderer.h"
-// #include "Framework/VKQuadRenderer.h"
-// #include "Framework/ShaderProcessor.h"
+// The application runs using just two render passes. The first pass renders a full-screen quad
+// and, at each fragment shader's invocation, saves its coordinates by atomically appending
+// them to an SSBO buffer. The second pass takes point coordinates from the list and outputs
+// these points onto the screen. The user can control the percentage of displayed points.
+// The visual randomness of the points reflects the order in which the GPU schedules the
+// fragment workload. It is worth comparing the output of this demo across various GPUs of
+// different vendors.
 
-// struct node
-// {
-//     uint32_t idx;
-//     float xx, yy;
-// };
+// inspired by the following good old OpenGL demo: https://www.
+// geeks3d.com/20120309/opengl-4-2-atomic-counter-demo-rendering-
+// order-of-fragments
 
-// static_assert(sizeof(node) == 3 * sizeof(uint32_t));
+#include "Framework/VulkanApp.h"
+#include "Framework/LineCanvas.h"
+#include "Framework/GuiRenderer.h"
+#include "Framework/VKQuadRenderer.h"
+#include "Framework/ShaderProcessor.h"
 
-// float g_Percentage = 0.5f;
+struct node
+{
+    uint32_t idx;
+    float xx, yy;
+};
 
-// struct AtomicRenderer : public Renderer
-// {
-//     AtomicRenderer(VulkanRenderContext &ctx, VulkanBuffer sizeBuffer) : Renderer(ctx)
-//     {
-//         const PipelineInfo pInfo = initRenderPass(PipelineInfo{}, {ctx.resources.addColorTexture()}, RenderPass(), ctx.screenRenderPass_NoDepth);
+static_assert(sizeof(node) == 3 * sizeof(uint32_t));
 
-//         uint32_t W = ctx.vkDev.framebufferWidth;
-//         uint32_t H = ctx.vkDev.framebufferHeight;
+float g_Percentage = 0.5f;
 
-//         const size_t imgCount = ctx.vkDev.swapchainImages.size();
-//         descriptorSets_.resize(imgCount);
-//         atomics_.resize(imgCount);
-//         output_.resize(imgCount);
+struct AtomicRenderer : public Renderer
+{
+    AtomicRenderer(VulkanRenderContext &ctx, VulkanBuffer sizeBuffer) : Renderer(ctx)
+    {
+        const PipelineInfo pInfo = initRenderPass(PipelineInfo{}, {ctx.resources.addColorTexture()}, RenderPass(), ctx.screenRenderPass_NoDepth);
 
-//         DescriptorSetInfo dsInfo = {
-//             .buffers = {
-//                 storageBufferAttachment(VulkanBuffer{}, 0, sizeof(uint32_t), VK_SHADER_STAGE_FRAGMENT_BIT),
-//                 storageBufferAttachment(VulkanBuffer{}, 0, W * H * sizeof(node), VK_SHADER_STAGE_FRAGMENT_BIT),
-//                 uniformBufferAttachment(sizeBuffer, 0, 8, VK_SHADER_STAGE_FRAGMENT_BIT)}};
+        uint32_t W = ctx.vkDev.framebufferWidth;
+        uint32_t H = ctx.vkDev.framebufferHeight;
 
-//         descriptorSetLayout_ = ctx.resources.addDescriptorSetLayout(dsInfo);
-//         descriptorPool_ = ctx.resources.addDescriptorPool(dsInfo, (uint32_t)imgCount);
+        const size_t imgCount = ctx.vkDev.swapchainImages.size();
+        descriptorSets_.resize(imgCount);
+        atomics_.resize(imgCount);
+        output_.resize(imgCount);
 
-//         for (size_t i = 0; i < imgCount; i++)
-//         {
-//             atomics_[i] = ctx.resources.addStorageBuffer(sizeof(uint32_t));
-//             output_[i] = ctx.resources.addStorageBuffer(W * H * sizeof(node));
-//             dsInfo.buffers[0].buffer = atomics_[i];
-//             dsInfo.buffers[1].buffer = output_[i];
+        DescriptorSetInfo dsInfo = {
+            .buffers = {
+                storageBufferAttachment(VulkanBuffer{}, 0, sizeof(uint32_t), VK_SHADER_STAGE_FRAGMENT_BIT),
+                storageBufferAttachment(VulkanBuffer{}, 0, W * H * sizeof(node), VK_SHADER_STAGE_FRAGMENT_BIT),
+                uniformBufferAttachment(sizeBuffer, 0, 8, VK_SHADER_STAGE_FRAGMENT_BIT)}};
 
-//             descriptorSets_[i] = ctx.resources.addDescriptorSet(descriptorPool_, descriptorSetLayout_);
-//             ctx.resources.updateDescriptorSet(descriptorSets_[i], dsInfo);
-//         }
+        descriptorSetLayout_ = ctx.resources.addDescriptorSetLayout(dsInfo);
+        descriptorPool_ = ctx.resources.addDescriptorPool(dsInfo, (uint32_t)imgCount);
 
-//         initPipeline({"data/shaders/10/VK01_AtomicTest.vert", "data/shaders/10/VK01_AtomicTest.frag"}, pInfo);
-//     }
+        for (size_t i = 0; i < imgCount; i++)
+        {
+            atomics_[i] = ctx.resources.addStorageBuffer(sizeof(uint32_t));
+            output_[i] = ctx.resources.addStorageBuffer(W * H * sizeof(node));
+            dsInfo.buffers[0].buffer = atomics_[i];
+            dsInfo.buffers[1].buffer = output_[i];
 
-//     void fillCommandBuffer(VkCommandBuffer commandBuffer, size_t currentImage, VkFramebuffer fb = VK_NULL_HANDLE, VkRenderPass rp = VK_NULL_HANDLE) override
-//     {
-//         beginRenderPass((rp != VK_NULL_HANDLE) ? rp : renderPass_.handle, (fb != VK_NULL_HANDLE) ? fb : framebuffer_, commandBuffer, currentImage);
-//         vkCmdDraw(commandBuffer, 6, 1, 0, 0);
-//         vkCmdEndRenderPass(commandBuffer);
-//     }
+            descriptorSets_[i] = ctx.resources.addDescriptorSet(descriptorPool_, descriptorSetLayout_);
+            ctx.resources.updateDescriptorSet(descriptorSets_[i], dsInfo);
+        }
 
-//     void updateBuffers(size_t currentImage) override
-//     {
-//         uint32_t zeroCount = 0;
-//         uploadBufferData(ctx_.vkDev, atomics_[currentImage].memory, 0, &zeroCount, sizeof(uint32_t));
-//     }
+        initPipeline({"data/shaders/10/VK01_AtomicTest.vert", "data/shaders/10/VK01_AtomicTest.frag"}, pInfo);
+    }
 
-//     std::vector<VulkanBuffer> &getOutputs() { return output_; }
+    void fillCommandBuffer(VkCommandBuffer commandBuffer, size_t currentImage, VkFramebuffer fb = VK_NULL_HANDLE, VkRenderPass rp = VK_NULL_HANDLE) override
+    {
+        beginRenderPass((rp != VK_NULL_HANDLE) ? rp : renderPass_.handle, (fb != VK_NULL_HANDLE) ? fb : framebuffer_, commandBuffer, currentImage);
+        vkCmdDraw(commandBuffer, 6, 1, 0, 0);
+        vkCmdEndRenderPass(commandBuffer);
+    }
 
-// private:
-//     std::vector<VulkanBuffer> atomics_;
-//     std::vector<VulkanBuffer> output_;
-// };
+    void updateBuffers(size_t currentImage) override
+    {
+        uint32_t zeroCount = 0;
+        uploadBufferData(ctx_.vkDev, atomics_[currentImage].memory, 0, &zeroCount, sizeof(uint32_t));
+    }
 
-// struct AnimRenderer : public Renderer
-// {
-//     AnimRenderer(VulkanRenderContext &ctx, std::vector<VulkanBuffer> &pointBuffers, VulkanBuffer sizeBuffer) : Renderer(ctx),
-//                                                                                                                pointBuffers_(pointBuffers)
-//     {
-//         initRenderPass(PipelineInfo{}, {}, RenderPass(), ctx.screenRenderPass_NoDepth);
+    std::vector<VulkanBuffer> &getOutputs() { return output_; }
 
-//         const size_t imgCount = ctx.vkDev.swapchainImages.size();
-//         descriptorSets_.resize(imgCount);
+private:
+    std::vector<VulkanBuffer> atomics_;
+    std::vector<VulkanBuffer> output_;
+};
 
-//         uint32_t W = ctx.vkDev.framebufferWidth;
-//         uint32_t H = ctx.vkDev.framebufferHeight;
+struct AnimRenderer : public Renderer
+{
+    AnimRenderer(VulkanRenderContext &ctx, std::vector<VulkanBuffer> &pointBuffers, VulkanBuffer sizeBuffer) : Renderer(ctx),
+                                                                                                               pointBuffers_(pointBuffers)
+    {
+        initRenderPass(PipelineInfo{}, {}, RenderPass(), ctx.screenRenderPass_NoDepth);
 
-//         DescriptorSetInfo dsInfo = {
-//             .buffers = {
-//                 storageBufferAttachment(VulkanBuffer{}, 0, W * H * sizeof(node), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
-//                 uniformBufferAttachment(sizeBuffer, 0, 8, VK_SHADER_STAGE_VERTEX_BIT)}};
+        const size_t imgCount = ctx.vkDev.swapchainImages.size();
+        descriptorSets_.resize(imgCount);
 
-//         descriptorSetLayout_ = ctx.resources.addDescriptorSetLayout(dsInfo);
-//         descriptorPool_ = ctx.resources.addDescriptorPool(dsInfo, (uint32_t)imgCount);
+        uint32_t W = ctx.vkDev.framebufferWidth;
+        uint32_t H = ctx.vkDev.framebufferHeight;
 
-//         for (size_t i = 0; i < imgCount; i++)
-//         {
-//             dsInfo.buffers[0].buffer = pointBuffers_[i];
-//             descriptorSets_[i] = ctx.resources.addDescriptorSet(descriptorPool_, descriptorSetLayout_);
-//             ctx.resources.updateDescriptorSet(descriptorSets_[i], dsInfo);
-//         }
+        DescriptorSetInfo dsInfo = {
+            .buffers = {
+                storageBufferAttachment(VulkanBuffer{}, 0, W * H * sizeof(node), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
+                uniformBufferAttachment(sizeBuffer, 0, 8, VK_SHADER_STAGE_VERTEX_BIT)}};
 
-//         initPipeline({"data/shaders/10/VK01_AtomicVisualize.vert", "data/shaders/10/VK01_AtomicVisualize.frag"}, PipelineInfo{.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST});
-//     }
+        descriptorSetLayout_ = ctx.resources.addDescriptorSetLayout(dsInfo);
+        descriptorPool_ = ctx.resources.addDescriptorPool(dsInfo, (uint32_t)imgCount);
 
-//     void fillCommandBuffer(VkCommandBuffer commandBuffer, size_t currentImage, VkFramebuffer fb = VK_NULL_HANDLE, VkRenderPass rp = VK_NULL_HANDLE) override
-//     {
-//         uint32_t pointCount =
-//             uint32_t(ctx_.vkDev.framebufferWidth * ctx_.vkDev.framebufferHeight * g_Percentage);
+        for (size_t i = 0; i < imgCount; i++)
+        {
+            dsInfo.buffers[0].buffer = pointBuffers_[i];
+            descriptorSets_[i] = ctx.resources.addDescriptorSet(descriptorPool_, descriptorSetLayout_);
+            ctx.resources.updateDescriptorSet(descriptorSets_[i], dsInfo);
+        }
 
-//         if (pointCount == 0)
-//             return;
+        initPipeline({"data/shaders/10/VK01_AtomicVisualize.vert", "data/shaders/10/VK01_AtomicVisualize.frag"}, PipelineInfo{.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST});
+    }
 
-//         beginRenderPass((rp != VK_NULL_HANDLE) ? rp : renderPass_.handle, (fb != VK_NULL_HANDLE) ? fb : framebuffer_, commandBuffer, currentImage);
-//         vkCmdDraw(commandBuffer, pointCount, 1, 0, 0);
-//         vkCmdEndRenderPass(commandBuffer);
-//     }
+    void fillCommandBuffer(VkCommandBuffer commandBuffer, size_t currentImage, VkFramebuffer fb = VK_NULL_HANDLE, VkRenderPass rp = VK_NULL_HANDLE) override
+    {
+        uint32_t pointCount =
+            uint32_t(ctx_.vkDev.framebufferWidth * ctx_.vkDev.framebufferHeight * g_Percentage);
 
-// private:
-//     std::vector<VulkanBuffer> &pointBuffers_;
-// };
+        if (pointCount == 0)
+            return;
 
-// struct MyApp : public CameraApp
-// {
-//     MyApp()
-//         : CameraApp(-80, -80, {.vertexPipelineStoresAndAtomics_ = true, .fragmentStoresAndAtomics_ = true}), sizeBuffer(ctx_.resources.addUniformBuffer(8)), atom(ctx_, sizeBuffer), anim(ctx_, atom.getOutputs(), sizeBuffer), imgui(ctx_, std::vector<VulkanTexture>{})
-//     {
-//         onScreenRenderers_.emplace_back(atom, false);
-//         onScreenRenderers_.emplace_back(anim, false);
-//         onScreenRenderers_.emplace_back(imgui, false);
+        beginRenderPass((rp != VK_NULL_HANDLE) ? rp : renderPass_.handle, (fb != VK_NULL_HANDLE) ? fb : framebuffer_, commandBuffer, currentImage);
+        vkCmdDraw(commandBuffer, pointCount, 1, 0, 0);
+        vkCmdEndRenderPass(commandBuffer);
+    }
 
-//         struct WH
-//         {
-//             float w, h;
-//         } wh{
-//             (float)ctx_.vkDev.framebufferWidth,
-//             (float)ctx_.vkDev.framebufferHeight};
+private:
+    std::vector<VulkanBuffer> &pointBuffers_;
+};
 
-//         uploadBufferData(ctx_.vkDev, sizeBuffer.memory, 0, &wh, sizeof(wh));
-//     }
+struct MyApp : public CameraApp
+{
+    MyApp()
+        : CameraApp(-80, -80, {.vertexPipelineStoresAndAtomics_ = true, .fragmentStoresAndAtomics_ = true}), sizeBuffer(ctx_.resources.addUniformBuffer(8)), atom(ctx_, sizeBuffer), anim(ctx_, atom.getOutputs(), sizeBuffer), imgui(ctx_, std::vector<VulkanTexture>{})
+    {
+        onScreenRenderers_.emplace_back(atom, false);
+        onScreenRenderers_.emplace_back(anim, false);
+        onScreenRenderers_.emplace_back(imgui, false);
 
-//     void draw3D() override {}
+        struct WH
+        {
+            float w, h;
+        } wh{
+            (float)ctx_.vkDev.framebufferWidth,
+            (float)ctx_.vkDev.framebufferHeight};
 
-//     void drawUI() override
-//     {
-//         ImGui::Begin("Settings", nullptr);
-//         ImGui::SliderFloat("Percentage", &g_Percentage, 0.0f, 1.0f);
-//         ImGui::End();
-//     }
+        uploadBufferData(ctx_.vkDev, sizeBuffer.memory, 0, &wh, sizeof(wh));
+    }
 
-// private:
-//     VulkanBuffer sizeBuffer;
+    void draw3D() override {}
 
-//     AtomicRenderer atom;
-//     AnimRenderer anim;
-//     GuiRenderer imgui;
-// };
+    void drawUI() override
+    {
+        ImGui::Begin("Settings", nullptr);
+        ImGui::SliderFloat("Percentage", &g_Percentage, 0.0f, 1.0f);
+        ImGui::End();
+    }
 
-// int main()
-// {
-//     MyApp app;
-//     app.mainLoop();
-//     return 0;
-// }
+private:
+    VulkanBuffer sizeBuffer;
+
+    AtomicRenderer atom;
+    AnimRenderer anim;
+    GuiRenderer imgui;
+};
+
+int main()
+{
+    MyApp app;
+    app.mainLoop();
+    return 0;
+}

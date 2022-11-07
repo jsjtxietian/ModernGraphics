@@ -12,5 +12,6 @@ void main()
 	node n = value[gl_VertexIndex];
 	gl_Position = vec4(2 * (vec2(n.xx / ubo.width, n.yy / ubo.height) - vec2(.5)), 0, 1);
 	gl_PointSize = 1;
+	// Darker colors correspond to the earliest fragments:
 	color = vec4((float(n.idx)/ubo.width) / ubo.height, 0, 0, 1);
 }
