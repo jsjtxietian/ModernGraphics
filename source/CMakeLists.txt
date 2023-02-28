@@ -73,7 +73,7 @@ endif()
 
 if (WIN32)
     set(DLLS_TO_COPY
-        ${CMAKE_CURRENT_SOURCE_DIR}/../../binaries/SDL2-2.0.18/lib/x64/SDL2.dll
+        ${CMAKE_CURRENT_SOURCE_DIR}/../binaries/SDL2-2.0.18/lib/x64/SDL2.dll
     )
 
     foreach(DLL ${DLLS_TO_COPY})
